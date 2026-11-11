@@ -424,7 +424,7 @@ export async function generarPdf(
   firma(l, yFirma, enc.firmante, f)
 
   const paginas = doc.getPages()
-  paginas.forEach((p, i) => pie(new Lienzo(p, f), i + 1, paginas.length, f))
+  for (const [i, p] of paginas.entries()) pie(new Lienzo(p, f), i + 1, paginas.length, f)
   await writeFile(destino, await doc.save())
   return campos.length
 }
