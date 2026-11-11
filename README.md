@@ -139,7 +139,7 @@ llamada al modelo con sus tokens y latencias, agrupados por conversación. Basta
 `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` y `LANGFUSE_BASE_URL`. Los datos sensibles se
 enmascaran antes de exportar. Detalle en [`SOLUCION.md`](SOLUCION.md#11-observabilidad-con-langfuse).
 
-Trace de ejemplo (procesar un caso de punta a punta): [abrir en Langfuse](https://us.cloud.langfuse.com/project/cmwbfksbk04w7ad0efkeyfx6f/traces/962cb138c271638bce867135deb783a4).
+Trace de ejemplo (procesar un caso de punta a punta): [abrir en Langfuse](https://us.cloud.langfuse.com/project/cmwbfksbk04w7ad0efkeyfx6f/traces/768206b4bc320d349c148ead86a2294d).
 
 ## Integración con otras plataformas de agentes
 
