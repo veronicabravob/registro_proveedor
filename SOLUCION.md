@@ -14,9 +14,9 @@ administrativa (dependencia de una persona) y a finanzas (días de retraso para 
 
 ```
 ┌──────────────────────┐  HTTP JSON  ┌───────────────────────────────────────────────────────┐
-│ web/ (chat, sin deps)│ ──────────▶ │ src/http/app.ts  Hono · CSP · rate limit · clave      │
+│ frontend/ (React)    │ ──────────▶ │ src/http/app.ts  Hono · CSP · rate limit · clave      │
 │ · historial          │ ◀────────── │        │                                              │
-│ · tarjetas de tools  │             │ src/agent/servicio.ts  sesión (memoria, TTL, LRU)     │
+│ · pasos en vivo (SSE)│             │ src/agent/servicio.ts  sesión (memoria, TTL, LRU)     │
 │ · banner confirmación│             │        │                                              │
 └──────────────────────┘             │ src/agent/ciclo.ts  ReAct · topes · puerta humana     │
                                      │        │                     │                        │
@@ -26,15 +26,15 @@ administrativa (dependencia de una persona) y a finanzas (días de retraso para 
                                      │ src/telemetry/ ── OpenTelemetry ──▶ Langfuse / OTLP   │
                                      └────────┼─────────────────────┼────────────────────────┘
                                               │                     │
-                              agent/prompt.md + src/knowledge/   fixtures/ (solo lectura)
+                              backend/agent/ + backend/src/knowledge/   fixtures/ (solo lectura)
                               (system prompt estable)            out/      (escritura)
 ```
 
-| Capa               | Dónde vive                                            | Qué contiene                                                                                                                                                                                                  |
-| ------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Comportamiento** | `agent/prompt.md`                                     | Rol, orden de trabajo, regla "solo valores de herramientas", protocolo de confirmación, formato del resumen.                                                                                                  |
-| **Conocimiento**   | `src/knowledge/registro-proveedor.md` + `reglas.json` | Proceso de negocio legible (se inyecta en el contexto) y parámetros que las herramientas aplican de forma determinista: identificador por país, umbrales de confianza, campos sensibles, nombres de soportes. |
-| **Ejecución**      | `src/tools/proveedor.ts` (+ `lib/`)                   | 6 herramientas tipadas con zod, sin dependencia del servidor, importables desde `demo.ts` y desde `modulo/`.                                                                                                  |
+| Capa               | Dónde vive                                                    | Qué contiene                                                                                                                                                                                                  |
+| ------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Comportamiento** | `backend/agent/prompt.md`                                     | Rol, orden de trabajo, regla "solo valores de herramientas", protocolo de confirmación, formato del resumen.                                                                                                  |
+| **Conocimiento**   | `backend/src/knowledge/registro-proveedor.md` + `reglas.json` | Proceso de negocio legible (se inyecta en el contexto) y parámetros que las herramientas aplican de forma determinista: identificador por país, umbrales de confianza, campos sensibles, nombres de soportes. |
+| **Ejecución**      | `backend/src/tools/proveedor.ts` (+ `lib/`)                   | 6 herramientas tipadas con zod, sin dependencia del servidor, importables desde `demo.ts` y desde `modulo/`.                                                                                                  |
 
 Un cambio de reglas de negocio (p. ej. agregar Guatemala → NIT) se hace en `reglas.json` y en el
 `.md` de conocimiento; no toca el servidor ni el ciclo.
@@ -51,12 +51,12 @@ Un cambio de reglas de negocio (p. ej. agregar Guatemala → NIT) se hace en `re
 | `proveedor_simular_envio`          | `{ caso, confirmado }`                   | `{ ruta }` o `{ ok: false, error: "requiere confirmación explícita" }`                |
 
 Todas devuelven un string JSON `{ ok, data }` / `{ ok: false, error }`, **nunca lanzan**
-(`lib/definir.ts` envuelve validación, captura de errores y bitácora RN5), y resuelven rutas desde
+(`backend/src/tools/lib/definir.ts` envuelve validación, captura de errores y bitácora RN5), y resuelven rutas desde
 `ctx.directory` con nombres de caso validados (sin _path traversal_).
 
 ## 3. Ciclo del agente
 
-Implementado a mano en `src/agent/ciclo.ts` siguiendo el patrón **ReAct** (Yao et al., 2023):
+Implementado a mano en `backend/src/agent/ciclo.ts` siguiendo el patrón **ReAct** (Yao et al., 2023):
 el modelo razona y decide una acción (herramienta), observa el resultado y repite hasta responder.
 
 ```
@@ -156,20 +156,23 @@ humano inicia sesión en una ventana del navegador controlado y el worker contin
 
 ## 6. Decisiones y trade-offs
 
-| #   | Decisión                                                                                               | Alternativa descartada                                 | Por qué                                                                                                                                                                                                        |
-| --- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Mapeo determinista** (glosario → clave literal → similitud de Dice con umbrales 0,8 / 0,6) en código | Pedir al LLM que mapee etiquetas                       | Reproducible, auditable (ruta `maestro.json#clave`), probado y gratis; el LLM podría "completar" valores. La similitud cubre variantes; lo dudoso queda en `requiere_confirmacion`.                            |
-| 2   | **Formulario desde `mapeo_id`** persistido                                                             | Pasar el mapeo (con valores) como argumento del modelo | Garantiza CA2 por diseño: el modelo no puede alterar un NIT o una cuenta en tránsito. Coste: una lectura de archivo.                                                                                           |
-| 3   | **Ciclo propio** con adaptador `enviar()`                                                              | Tool Runner del SDK / frameworks (LangChain, AutoGen)  | El PRD exige que cambiar de proveedor no toque el ciclo, y la puerta de confirmación debe vivir en el host. Un agente único basta: multiagente (Wu et al., 2023) añadiría costo y latencia sin beneficio aquí. |
-| 4   | **Confirmación como herramienta + estado en el host**                                                  | Detectar "¿confirmas?" en el texto del modelo          | Señal estructurada y verificable; el front sabe exactamente qué acción y caso aprobar.                                                                                                                         |
-| 5   | **PDF generado** con pdf-lib                                                                           | Rellenar un AcroForm                                   | El PRD lo acepta; no hay PDF original en los fixtures. pdf-lib es JS puro (sin binarios nativos).                                                                                                              |
-| 6   | **Sesiones en memoria** con TTL y LRU                                                                  | Base de datos / archivo                                | No-objetivo del PRD; en Render free el disco es efímero. Se pierde el historial al reiniciar (aceptado).                                                                                                       |
-| 7   | **OpenTelemetry neutral** + Langfuse como destino                                                      | SDK propietario de Langfuse en el código               | Las trazas usan semántica `gen_ai.*`; cambiar a Grafana/Honeycomb es configuración. El SDK de Anthropic aporta sus spans nativos.                                                                              |
-| 8   | **Biome**                                                                                              | ESLint + Prettier                                      | Una sola herramienta, rápida y liviana (disco limitado en la máquina de desarrollo).                                                                                                                           |
+| #   | Decisión                                                                                               | Alternativa descartada                                 | Por qué                                                                                                                                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Mapeo determinista** (glosario → clave literal → similitud de Dice con umbrales 0,8 / 0,6) en código | Pedir al LLM que mapee etiquetas                       | Reproducible, auditable (ruta `maestro.json#clave`), probado y gratis; el LLM podría "completar" valores. La similitud cubre variantes; lo dudoso queda en `requiere_confirmacion`.                                                                                                            |
+| 2   | **Formulario desde `mapeo_id`** persistido                                                             | Pasar el mapeo (con valores) como argumento del modelo | Garantiza CA2 por diseño: el modelo no puede alterar un NIT o una cuenta en tránsito. Coste: una lectura de archivo.                                                                                                                                                                           |
+| 3   | **Ciclo propio** con adaptador `enviar()`                                                              | Tool Runner del SDK / frameworks (LangChain, AutoGen)  | El PRD exige que cambiar de proveedor no toque el ciclo, y la puerta de confirmación debe vivir en el host. Un agente único basta: multiagente (Wu et al., 2023) añadiría costo y latencia sin beneficio aquí.                                                                                 |
+| 4   | **Confirmación como herramienta + estado en el host**                                                  | Detectar "¿confirmas?" en el texto del modelo          | Señal estructurada y verificable; el front sabe exactamente qué acción y caso aprobar.                                                                                                                                                                                                         |
+| 5   | **PDF generado** con pdf-lib                                                                           | Rellenar un AcroForm                                   | El PRD lo acepta; no hay PDF original en los fixtures. pdf-lib es JS puro (sin binarios nativos).                                                                                                                                                                                              |
+| 6   | **Sesiones en memoria** con TTL y LRU                                                                  | Base de datos / archivo                                | No-objetivo del PRD; en Render free el disco es efímero. Se pierde el historial al reiniciar (aceptado).                                                                                                                                                                                       |
+| 7   | **OpenTelemetry neutral** + Langfuse como destino                                                      | SDK propietario de Langfuse en el código               | Las trazas usan semántica `gen_ai.*`; cambiar a Grafana/Honeycomb es configuración. El SDK de Anthropic aporta sus spans nativos.                                                                                                                                                              |
+| 8   | **Biome**                                                                                              | ESLint + Prettier                                      | Una sola herramienta, rápida y liviana (disco limitado en la máquina de desarrollo).                                                                                                                                                                                                           |
+| 9   | **Front en React + Vite + TypeScript**, monorepo `backend/` + `frontend/`                              | HTML plano / front servido aparte                      | El chat tiene estado real (conversaciones, pasos en vivo, confirmaciones); componentes y un hook concentran esa lógica, y la lógica de dominio del front se prueba sin navegador. Un solo despliegue: el backend sirve `frontend/dist` en el mismo origen (sin CORS).                          |
+| 10  | **Lenguaje de negocio en la interfaz**; detalle técnico plegado                                        | Mostrar nombres de herramientas y JSON en primer plano | La usuaria es la analista administrativa. Cada paso se lee como "Leí la solicitud", "Armé el paquete…"; el nombre de la herramienta, lo que se le pidió y lo que respondió siguen visibles al desplegar (PRD §6.1). El prompt también pide hablar por nombre de cliente, sin rutas ni códigos. |
+| 11  | **Streaming SSE** del avance del turno                                                                 | Solo respuesta al final / WebSockets                   | La analista ve cada paso en vivo ("Estoy armando el paquete…"); SSE sobre POST es unidireccional y basta, sin estado de conexión adicional. `/api/chat` (JSON) se mantiene para integraciones y pruebas.                                                                                       |
 
 **Dependencias** (todas justificadas): `@anthropic-ai/sdk` (modelo), `zod` (contrato de
-herramientas, configuración y API), `hono` + `@hono/node-server` (HTTP liviano y testeable sin
-puertos), `exceljs` (escribir celdas exactas, conservando texto), `pdf-lib` (PDF sin binarios),
+herramientas, configuración y API), `hono` + `@hono/node-server` (HTTP y SSE, testeable sin
+puertos), `react` + `react-dom` + `react-markdown` (interfaz; markdown sin HTML crudo), `vite` (build del front), `exceljs` (escribir celdas exactas, conservando texto), `pdf-lib` (PDF sin binarios),
 `@opentelemetry/*` + `@langfuse/otel` (trazas y métricas), `tsx` (ejecutar TypeScript en Node).
 Desarrollo: `typescript`, `@types/node`, `@biomejs/biome`. Pruebas con `node:test` (sin dependencia).
 
@@ -190,17 +193,18 @@ Desarrollo: `typescript`, `@types/node`, `@biomejs/biome`. Pruebas con `node:tes
 
 ## 8. Cobertura
 
-| Historia                | Estado                                                       | Evidencia                                                                                             | Falta para producción                                                  |
-| ----------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| HU-1 Leer la solicitud  | **Hecho**                                                    | `leer_solicitud`, ambiguas con equivalente por país                                                   | Leer el `.xlsx`/`.pdf` real del adjunto en vez de un JSON normalizado. |
-| HU-2 Mapear campos      | **Hecho**                                                    | 3 estados, ruta del dato, glosario, umbral 0,8, RN1                                                   | Revisión humana de sinónimos nuevos que alimente el glosario.          |
-| HU-3 Formulario         | **Hecho** P0 xlsx · P1 pdf · P2 portal (`valores-portal.md`) | Pruebas leen la celda exacta del Excel generado                                                       | Rellenar la plantilla original del cliente y AcroForms.                |
-| HU-4 Paquete para firma | **Hecho**                                                    | checklist con presentes/ausentes/vencidos, borrador sin datos bancarios, confirmación antes de enviar | Firma electrónica y envío real (fuera de alcance).                     |
-| HU-5 Errores            | **Hecho**                                                    | Caso inexistente, plantilla corrupta, args inválidos, timeout del modelo                              | Alertas operativas sobre la tasa de errores.                           |
-| Bonus módulo (§9.4)     | **Hecho**                                                    | `modulo/` generado de las mismas fuentes; `modulo:check` en CI                                        | Publicarlo como paquete versionado.                                    |
-| Link público            | **Hecho**                                                    | Render, autodeploy desde `main`                                                                       | Plan pagado (sin "cold start"), dominio propio.                        |
+| Historia                | Estado                                                       | Evidencia                                                                                                        | Falta para producción                                                  |
+| ----------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| HU-1 Leer la solicitud  | **Hecho**                                                    | `leer_solicitud`, ambiguas con equivalente por país                                                              | Leer el `.xlsx`/`.pdf` real del adjunto en vez de un JSON normalizado. |
+| HU-2 Mapear campos      | **Hecho**                                                    | 3 estados, ruta del dato, glosario, umbral 0,8, RN1                                                              | Revisión humana de sinónimos nuevos que alimente el glosario.          |
+| HU-3 Formulario         | **Hecho** P0 xlsx · P1 pdf · P2 portal (`valores-portal.md`) | Pruebas leen la celda exacta del Excel generado                                                                  | Rellenar la plantilla original del cliente y AcroForms.                |
+| HU-4 Paquete para firma | **Hecho**                                                    | checklist con presentes/ausentes/vencidos, borrador sin datos bancarios, confirmación antes de enviar            | Firma electrónica y envío real (fuera de alcance).                     |
+| HU-5 Errores            | **Hecho**                                                    | Caso inexistente, plantilla corrupta, args inválidos, timeout del modelo                                         | Alertas operativas sobre la tasa de errores.                           |
+| Bonus módulo (§9.4)     | **Hecho**                                                    | `modulo/` generado de las mismas fuentes; `modulo:check` en CI                                                   | Publicarlo como paquete versionado.                                    |
+| Front según diseño      | **Hecho**                                                    | React con el prototipo de `docs/diseno/`: pasos en vivo, progreso de 5 puntos, confirmación resaltada, descargas | Pruebas de componentes y de accesibilidad automatizadas.               |
+| Link público            | **Hecho**                                                    | Render, autodeploy desde `main`                                                                                  | Plan pagado (sin "cold start"), dominio propio.                        |
 
-**Calidad**: 50 pruebas (`node:test`): herramientas, ciclo con LLM guionado, API, telemetría y
+**Calidad**: 59 pruebas (`node:test`: 52 del backend y 7 del dominio del front): herramientas, ciclo con LLM guionado, API, telemetría y
 módulo. Cobertura ≈ 97 % líneas / 86 % ramas, con umbrales que hacen fallar el CI.
 CI en cada rama: Biome, tipos estrictos, pruebas, `demo.ts` sin claves, `npm audit`, gitleaks;
 CodeQL; dependency review; Dependabot. GitHub _push protection_ bloqueó una vez un secreto: funcionó.
