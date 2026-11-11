@@ -7,7 +7,7 @@ import { NodeSDK } from "@opentelemetry/sdk-node"
 import { BatchSpanProcessor, type SpanProcessor } from "@opentelemetry/sdk-trace-node"
 import type { Observador } from "../agent/observador.ts"
 import type { Configuracion } from "../config.ts"
-import type { Enmascarador } from "./enmascarar.ts"
+import { crearProcesadorEnmascarado, type Enmascarador } from "./enmascarar.ts"
 import { crearObservadorOtel, NOMBRE_INSTRUMENTACION } from "./observador-otel.ts"
 
 export interface EstadoTelemetria {
@@ -69,6 +69,9 @@ export function iniciarTelemetria(config: Configuracion, enmascarar: Enmascarado
     )
     estado.metricas.push("consola")
   }
+
+  // El enmascarado va primero: modifica los spans antes de que cualquier exportador los lea.
+  if (spanProcessors.length) spanProcessors.unshift(crearProcesadorEnmascarado(enmascarar))
 
   let sdk: NodeSDK | undefined
   if (spanProcessors.length || metricReaders.length) {
