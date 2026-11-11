@@ -68,7 +68,6 @@ summary:focus-visible {
 /* La app ocupa exactamente la ventana: el encabezado y el lateral quedan fijos y solo
    se desplaza el área del chat (antes se desplazaba toda la página, lateral incluido). */
 .app {
-  height: 100vh;
   height: 100dvh;
   display: flex;
   flex-direction: column;
