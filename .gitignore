@@ -13,3 +13,6 @@ dist/
 *clave*
 *.key
 *.pem
+
+# Build del front
+frontend/dist/

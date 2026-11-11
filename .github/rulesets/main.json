@@ -25,6 +25,7 @@
           { "context": "Tipos (tsc estricto, sin any)" },
           { "context": "Pruebas y cobertura" },
           { "context": "demo.ts sin modelo (PRD §6.6)" },
+          { "context": "Build del front (React + Vite)" },
           { "context": "Escaneo de secretos (gitleaks)" }
         ]
       }

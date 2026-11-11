@@ -50,6 +50,16 @@ jobs:
       - name: Pruebas con umbral de cobertura (quality gate)
         run: npm run test:coverage
 
+  build:
+    name: Build del front (React + Vite)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
+      - run: npm ci
+      - run: npm run build
+
   demo:
     name: demo.ts sin modelo (PRD §6.6)
     runs-on: ubuntu-24.04

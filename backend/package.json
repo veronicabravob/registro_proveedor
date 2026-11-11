@@ -1,0 +1,36 @@
+{
+  "name": "@registro/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "API, ciclo del agente, herramientas y telemetría",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "test:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-include=\"src/tools/**\" --test-coverage-include=\"src/agent/**\" --test-coverage-include=\"src/telemetry/**\" --test-coverage-include=\"src/http/**\" --test-coverage-lines=85 --test-coverage-branches=75 --test-coverage-functions=85 \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "modulo": "tsx scripts/generar-modulo.ts",
+    "modulo:check": "tsx scripts/generar-modulo.ts --check"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@hono/node-server": "^2.1.6",
+    "@langfuse/otel": "^6.1.1",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.223.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.1",
+    "@opentelemetry/resources": "^2.12.1",
+    "@opentelemetry/sdk-metrics": "^2.12.1",
+    "@opentelemetry/sdk-node": "^0.223.1",
+    "@opentelemetry/sdk-trace-node": "^2.12.1",
+    "exceljs": "^4.4.0",
+    "hono": "^4.13.17",
+    "pdf-lib": "^1.17.1",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  }
+}

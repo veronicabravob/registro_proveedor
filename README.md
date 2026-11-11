@@ -26,8 +26,9 @@ Procesa el caso "ec-corp-andina". Dime qué campos quedaron llenos, cuáles falt
 está listo para firma y qué soportes debo actualizar. No envíes nada todavía.
 ```
 
-Luego escribe `envía`: el agente pide confirmación (se resalta en amarillo) y solo tras un "sí"
-explícito escribe `out/ec-corp-andina/ENVIO-SIMULADO.md`.
+O simplemente elige la tarjeta **Corporación Andina** en la pantalla de inicio. Luego escribe `envía`:
+el agente pide confirmación (tarjeta verde con botones) y solo tras un "sí" explícito registra el
+envío simulado (`out/ec-corp-andina/ENVIO-SIMULADO.md`).
 
 ## Levantar en local (un comando)
 
@@ -36,10 +37,16 @@ Requisitos: **Node 22+** (o Bun).
 ```bash
 cp .env.example .env      # poner ANTHROPIC_API_KEY
 npm install
-npm run dev               # front + backend en http://localhost:3000
+npm run dev               # backend :3000 + front :5173 → abrir http://localhost:5173
 ```
 
-Con Bun: `bun install && bun run src/server.ts`.
+Como en producción (un solo servidor que sirve el front compilado):
+
+```bash
+npm run build && npm start   # http://localhost:3000
+```
+
+Con Bun: `bun install && bun run demo.ts` (verificación) y `bun run backend/src/server.ts` (servidor).
 
 ## Verificación sin modelo
 
@@ -52,14 +59,15 @@ herramientas e imprime un resumen por caso. No necesita ninguna clave.
 
 ## Scripts
 
-| Script                               | Qué hace                                             |
-| ------------------------------------ | ---------------------------------------------------- |
-| `npm run dev` / `npm start`          | Servidor con front (watch / producción)              |
-| `npm run demo`                       | Herramientas sin modelo (PRD §6.6)                   |
-| `npm test` / `npm run test:coverage` | Pruebas (`node:test`) / con umbrales de cobertura    |
-| `npm run lint` / `npm run format`    | Biome: lint y formato                                |
-| `npm run typecheck`                  | TypeScript estricto, sin `any`                       |
-| `npm run modulo` / `modulo:check`    | Genera / verifica el módulo reutilizable (`modulo/`) |
+| Script                               | Qué hace                                                     |
+| ------------------------------------ | ------------------------------------------------------------ |
+| `npm run dev`                        | Backend y front en modo desarrollo (Vite con proxy a la API) |
+| `npm run build` / `npm start`        | Compila el front y arranca el servidor de producción         |
+| `npm run demo`                       | Herramientas sin modelo (PRD §6.6)                           |
+| `npm test` / `npm run test:coverage` | Pruebas (`node:test`) / con umbrales de cobertura            |
+| `npm run lint` / `npm run format`    | Biome: lint y formato                                        |
+| `npm run typecheck`                  | TypeScript estricto, sin `any`                               |
+| `npm run modulo` / `modulo:check`    | Genera / verifica el módulo reutilizable (`modulo/`)         |
 
 ## Variables de entorno
 
@@ -80,6 +88,7 @@ Todas documentadas en [`.env.example`](.env.example). Las principales:
 
 | Método | Ruta                    | Cuerpo / respuesta                                                                                                        |
 | ------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/api/chat/stream`      | Igual que `/api/chat`, pero emite el avance en vivo (SSE: `paso_inicio`, `paso_fin`, `respuesta`)                         |
 | `POST` | `/api/chat`             | `{ sessionId?, message, confirm? }` → `{ sessionId, reply, toolCalls[], needsConfirmation, pendingAction, error, usage }` |
 | `GET`  | `/api/sessions/:id`     | Historial completo visible de la sesión                                                                                   |
 | `GET`  | `/api/health`           | `{ ok: true, provider, model, ... }` sin exponer claves                                                                   |
@@ -94,23 +103,33 @@ curl -s https://registro-proveedor-fl6d.onrender.com/api/chat \
   -d '{"message":"Procesa el caso co-industrias-delta"}'
 ```
 
-## Estructura
+## Estructura (monorepo con npm workspaces)
 
 ```
-agent/prompt.md            comportamiento (system prompt)
-src/knowledge/             conocimiento: proceso (md) y reglas de negocio (json)
-src/tools/                 ejecución: herramientas zod → proveedor_<export>
-src/agent/                 ciclo del agente, sesiones, confirmación humana
-src/llm/                   interfaz de proveedor + implementación Anthropic
-src/telemetry/             OpenTelemetry → Langfuse / OTLP, métricas, enmascarado
-src/http/                  API Hono y seguridad (CSP, rate limit, clave)
-web/                       front de chat sin dependencias
-modulo/                    bonus: agente empaquetado reutilizable
-fixtures/reto-01/          entregados por Periferia (no modificar)
-test/                      pruebas unitarias, de ciclo, de API y del módulo
-demo.ts                    verificación sin modelo
-render.yaml                despliegue como código (Render Blueprint)
+backend/                         API, agente, herramientas y telemetría (Node + TypeScript)
+  agent/prompt.md                comportamiento (system prompt)
+  src/knowledge/                 conocimiento: proceso (md) y reglas de negocio (json)
+  src/tools/                     ejecución: herramientas zod → proveedor_<export>
+  src/agent/                     ciclo del agente, sesiones, confirmación humana
+  src/llm/                       interfaz de proveedor + implementación Anthropic
+  src/telemetry/                 OpenTelemetry → Langfuse / OTLP, métricas, enmascarado
+  src/http/                      API Hono (JSON y streaming SSE) y seguridad
+  test/                          pruebas de herramientas, ciclo, API, telemetría y módulo
+frontend/                        chat de la analista (React + Vite + TypeScript)
+  src/api/                       cliente tipado de la API y lector de streaming
+  src/dominio/                   pasos en lenguaje de negocio, progreso, archivos (con pruebas)
+  src/hooks/useAgente.ts         estado de la conversación
+  src/componentes/               bienvenida, pasos, respuesta, confirmación, marco
+modulo/                          bonus: agente empaquetado reutilizable
+fixtures/reto-01/                entregados por Periferia (no modificar)
+docs/                            PRD y prototipo de diseño del front
+demo.ts                          verificación sin modelo
+render.yaml                      despliegue como código (Render Blueprint)
 ```
+
+El front habla con el backend por `/api`: en desarrollo, Vite reenvía `/api` al puerto 3000; en
+producción, el backend sirve `frontend/dist` desde el mismo origen (sin CORS, con CSP estricta).
+El chat usa `POST /api/chat/stream` para mostrar cada paso del agente en vivo.
 
 ## Flujo de trabajo y quality gates
 
