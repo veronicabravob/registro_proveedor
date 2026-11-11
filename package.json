@@ -5,20 +5,35 @@
   "type": "module",
   "description": "Agente conversacional \"Registro como Proveedor\" — Reto 01 Periferia IT Group",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "demo": "tsx demo.ts",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@hono/node-server": "^2.1.6",
+    "@langfuse/otel": "^6.1.1",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.223.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.1",
+    "@opentelemetry/resources": "^2.12.1",
+    "@opentelemetry/sdk-metrics": "^2.12.1",
+    "@opentelemetry/sdk-node": "^0.223.1",
+    "@opentelemetry/sdk-trace-node": "^2.12.1",
+    "@opentelemetry/semantic-conventions": "^1.45.0",
+    "exceljs": "^4.4.0",
+    "hono": "^4.13.17",
+    "pdf-lib": "^1.17.1",
+    "tsx": "^4.23.15",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
