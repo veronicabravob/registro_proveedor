@@ -6,3 +6,10 @@ out/
 dist/
 *.log
 .DS_Store
+
+# Archivos locales con secretos: nunca al repo
+*.txt
+!fixtures/**/*.txt
+*clave*
+*.key
+*.pem
