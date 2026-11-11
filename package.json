@@ -28,7 +28,7 @@
     "@opentelemetry/exporter-trace-otlp-http": "^0.223.1",
     "@opentelemetry/resources": "^2.12.1",
     "@opentelemetry/sdk-metrics": "^2.12.1",
-    "@opentelemetry/sdk-node": "^0.223.1",
+    "@opentelemetry/sdk-node": "^0.301.0",
     "@opentelemetry/sdk-trace-node": "^2.12.1",
     "exceljs": "^4.4.0",
     "hono": "^4.13.17",
