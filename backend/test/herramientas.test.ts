@@ -198,3 +198,17 @@ describe("HU-5 · errores claros, nunca excepciones", () => {
     }
   })
 })
+
+describe("privacidad · minimización de datos", () => {
+  it("el modelo no recibe valores sensibles completos, pero el formulario sí los lleva", async () => {
+    const d = await ejecutar(proveedor.mapear_campos.execute({ caso: "co-industrias-delta", campos: [] }, ctx))
+    const texto = JSON.stringify(d)
+    assert.doesNotMatch(texto, /03100012345|71555123/)
+    const cuenta = (d.llenos as { etiqueta: string; valor: string }[]).find((c) => c.etiqueta === "Número de cuenta")
+    assert.equal(cuenta?.valor, "••••2345")
+    await ejecutar(proveedor.generar_formulario.execute({ caso: "co-industrias-delta", mapeo: String(d.mapeo_id) }, ctx))
+    const libro = new ExcelJS.Workbook()
+    await libro.xlsx.readFile(join(ctx.directory, "out/co-industrias-delta/formulario.xlsx"))
+    assert.equal(libro.getWorksheet("Datos Bancarios")?.getCell("C5").value, "03100012345")
+  })
+})
