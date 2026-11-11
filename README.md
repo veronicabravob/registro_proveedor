@@ -59,15 +59,16 @@ herramientas e imprime un resumen por caso. No necesita ninguna clave.
 
 ## Scripts
 
-| Script                               | Qué hace                                                     |
-| ------------------------------------ | ------------------------------------------------------------ |
-| `npm run dev`                        | Backend y front en modo desarrollo (Vite con proxy a la API) |
-| `npm run build` / `npm start`        | Compila el front y arranca el servidor de producción         |
-| `npm run demo`                       | Herramientas sin modelo (PRD §6.6)                           |
-| `npm test` / `npm run test:coverage` | Pruebas (`node:test`) / con umbrales de cobertura            |
-| `npm run lint` / `npm run format`    | Biome: lint y formato                                        |
-| `npm run typecheck`                  | TypeScript estricto, sin `any`                               |
-| `npm run modulo` / `modulo:check`    | Genera / verifica el módulo reutilizable (`modulo/`)         |
+| Script                               | Qué hace                                                         |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| `npm run dev`                        | Backend y front en modo desarrollo (Vite con proxy a la API)     |
+| `npm run build` / `npm start`        | Compila el front y arranca el servidor de producción             |
+| `npm run demo`                       | Herramientas sin modelo (PRD §6.6)                               |
+| `npm test` / `npm run test:coverage` | Pruebas (`node:test`) / con umbrales de cobertura                |
+| `npm run lint` / `npm run format`    | Biome: lint y formato                                            |
+| `npm run typecheck`                  | TypeScript estricto, sin `any`                                   |
+| `npm run modulo` / `modulo:check`    | Genera / verifica las piezas del agente para otras plataformas   |
+| `npm run modulo:empaquetar`          | Arma el paquete descargable en `dist/agente-registro-proveedor/` |
 
 ## Variables de entorno
 
@@ -120,7 +121,7 @@ frontend/                        chat de la analista (React + Vite + TypeScript)
   src/dominio/                   pasos en lenguaje de negocio, progreso, archivos (con pruebas)
   src/hooks/useAgente.ts         estado de la conversación
   src/componentes/               bienvenida, pasos, respuesta, confirmación, marco
-modulo/                          bonus: agente empaquetado reutilizable
+modulo/                          agente para otras plataformas (prompt, skill, herramientas)
 fixtures/reto-01/                entregados por Periferia (no modificar)
 docs/                            PRD y prototipo de diseño del front
 demo.ts                          verificación sin modelo
@@ -131,6 +132,21 @@ El front habla con el backend por `/api`: en desarrollo, Vite reenvía `/api` al
 producción, el backend sirve `frontend/dist` desde el mismo origen (sin CORS, con CSP estricta).
 El chat usa `POST /api/chat/stream` para mostrar cada paso del agente en vivo.
 
+## Observabilidad (Langfuse)
+
+Cada turno del agente se traza en Langfuse vía OpenTelemetry: el turno, cada herramienta y cada
+llamada al modelo con sus tokens y latencias, agrupados por conversación. Basta definir
+`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` y `LANGFUSE_BASE_URL`. Los datos sensibles se
+enmascaran antes de exportar. Detalle en [`SOLUCION.md`](SOLUCION.md#11-observabilidad-con-langfuse).
+
+Trace de ejemplo (procesar un caso de punta a punta): [abrir en Langfuse](https://us.cloud.langfuse.com/project/cmwbfksbk04w7ad0efkeyfx6f/traces/962cb138c271638bce867135deb783a4).
+
+## Integración con otras plataformas de agentes
+
+El agente se puede usar sin este servidor: descarga
+[`agente-registro-proveedor.zip`](https://github.com/veronicabravob/registro_proveedor/releases/latest/download/agente-registro-proveedor.zip)
+(o `npm run modulo:empaquetar`) y sigue la guía de [`modulo/README.md`](modulo/README.md).
+
 ## Flujo de trabajo y quality gates
 
 - Una rama por funcionalidad (`feature/*`, `ci/*`, `deploy/*`, `docs/*`), commits convencionales y
@@ -138,4 +154,5 @@ El chat usa `POST /api/chat/stream` para mostrar cada paso del agente en vivo.
 - Cada push corre: Biome, `tsc` estricto, pruebas con cobertura mínima (85 % líneas, 75 % ramas),
   `demo.ts` sin claves, verificación del módulo, `npm audit` y gitleaks. CodeQL en `main` y PR;
   dependency review y Dependabot semanales.
+- Detalle de cada control en [`SOLUCION.md`](SOLUCION.md#13-quality-gates-en-github).
 - Ruleset de protección de `main` versionado en `.github/rulesets/main.json`.

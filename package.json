@@ -22,7 +22,8 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "modulo": "npm run modulo -w backend",
-    "modulo:check": "npm run modulo:check -w backend"
+    "modulo:check": "npm run modulo:check -w backend",
+    "modulo:empaquetar": "npm run modulo:empaquetar -w backend"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.6",

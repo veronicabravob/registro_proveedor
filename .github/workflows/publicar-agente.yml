@@ -1,0 +1,36 @@
+name: Publicar agente
+
+# Arma el paquete del agente para otras plataformas (prompt + skill + herramientas) desde las mismas
+# fuentes que usa la app y lo adjunta a una release de GitHub, con un enlace de descarga estable:
+# https://github.com/veronicabravob/registro_proveedor/releases/latest/download/agente-registro-proveedor.zip
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publicar:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with: { node-version: "22", cache: npm }
+      - run: npm ci
+      - name: Verificar que el agente está sincronizado con la app
+        run: npm run modulo:check
+      - name: Armar paquete
+        run: npm run modulo:empaquetar
+      - name: Probar el paquete de forma aislada (sin el resto del repositorio)
+        run: |
+          cp -r dist/agente-registro-proveedor "$RUNNER_TEMP/agente"
+          cd "$RUNNER_TEMP/agente" && npm install --no-audit --no-fund && npm run ejemplo
+      - name: Comprimir
+        run: cd dist && zip -qr agente-registro-proveedor.zip agente-registro-proveedor
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/agente-registro-proveedor.zip
+          generate_release_notes: true
