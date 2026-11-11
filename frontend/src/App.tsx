@@ -50,7 +50,12 @@ export function App() {
               </>
             )}
           </div>
-          <Compositor enviar={(t) => void enviar(t)} trabajando={e.trabajando} hayConversacion={enConversacion} />
+          <Compositor
+            enviar={(t) => void enviar(t)}
+            trabajando={e.trabajando}
+            hayConversacion={enConversacion}
+            archivada={e.archivada}
+          />
         </main>
       </div>
       {e.pideClave && <ClaveAcceso ingresar={ingresarClave} />}

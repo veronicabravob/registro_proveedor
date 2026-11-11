@@ -118,3 +118,22 @@ describe("textos para la analista", () => {
     assert.equal(duracion(1600), "1,6 s")
   })
 })
+
+describe("conversaciones antiguas", () => {
+  it("guarda y recupera una copia local del historial", async () => {
+    const memoria = new Map<string, string>()
+    Object.assign(globalThis, {
+      localStorage: {
+        getItem: (k: string) => memoria.get(k) ?? null,
+        setItem: (k: string, v: string) => void memoria.set(k, v),
+        removeItem: (k: string) => void memoria.delete(k),
+      },
+    })
+    const { guardarHistorial, leerHistorial, borrarHistorial } = await import("./conversaciones.ts")
+    guardarHistorial("sesion-1", [{ tipo: "usuario", texto: "hola" }])
+    assert.deepEqual(leerHistorial("sesion-1"), [{ tipo: "usuario", texto: "hola" }])
+    assert.equal(leerHistorial("no-existe"), null)
+    borrarHistorial("sesion-1")
+    assert.equal(leerHistorial("sesion-1"), null)
+  })
+})

@@ -6,7 +6,9 @@ import {
   type ConversacionGuardada,
   estadoDe,
   guardarConversaciones,
+  guardarHistorial,
   leerConversaciones,
+  leerHistorial,
 } from "../dominio/conversaciones.ts"
 import { casoDe, nombreCorto } from "../dominio/pasos.ts"
 
@@ -27,12 +29,19 @@ export interface EstadoAgente {
   uso: Uso | null
   aviso: string | null
   pideClave: boolean
+  /** Conversación antigua que el servidor ya no tiene: se puede leer, no continuar. */
+  archivada: boolean
 }
 
 const deHistorial = (m: EntradaHistorial): Mensaje =>
   m.rol === "usuario"
     ? { tipo: "usuario", texto: m.texto }
     : { tipo: "agente", texto: m.texto, llamadas: m.llamadas, pidioConfirmacion: m.needsConfirmation, error: m.error ?? null }
+
+const AVISO_ARCHIVADA =
+  "Esta conversación ya terminó en el servidor (se reinicia con cada actualización): puedes leerla aquí; si escribes, empieza una nueva."
+const AVISO_SIN_COPIA =
+  "Esta conversación ya terminó en el servidor y este navegador no tiene una copia. Escribe para empezar una nueva."
 
 /** Estado y acciones del chat con el agente. Toda la comunicación con el backend pasa por aquí. */
 export function useAgente() {
@@ -48,6 +57,7 @@ export function useAgente() {
   const [uso, setUso] = useState<Uso | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [pideClave, setPideClave] = useState(false)
+  const [archivada, setArchivada] = useState(false)
   const reintento = useRef<(() => void) | null>(null)
 
   const manejarError = useCallback((e: unknown, repetir?: () => void) => {
@@ -82,15 +92,24 @@ export function useAgente() {
     async (texto: string, confirmar?: boolean) => {
       const limpio = texto.trim()
       if (!limpio || trabajando) return
+      // Escribir sobre una conversación archivada empieza una nueva (el servidor ya no la tiene).
+      const base = archivada ? [] : mensajes
+      const sesionBase = archivada ? null : sesionId
+      const usuario: Mensaje = { tipo: "usuario", texto: limpio }
+      setArchivada(false)
       setAviso(null)
       setPendiente(null)
       setTrabajando(true)
       setEnVivo([])
-      setMensajes((m) => [...m, { tipo: "usuario", texto: limpio }])
+      if (archivada) {
+        setSesionId(null)
+        setUso(null)
+      }
+      setMensajes([...base, usuario])
       try {
         const r = await api.conversar(
           {
-            ...(sesionId ? { sessionId: sesionId } : {}),
+            ...(sesionBase ? { sessionId: sesionBase } : {}),
             message: limpio,
             ...(confirmar === undefined ? {} : { confirm: confirmar }),
           },
@@ -102,22 +121,22 @@ export function useAgente() {
             }
           },
         )
+        const respuesta: Mensaje = {
+          tipo: "agente",
+          texto: r.reply,
+          llamadas: r.toolCalls,
+          pidioConfirmacion: r.needsConfirmation,
+          error: r.error?.mensaje ?? null,
+        }
+        const historial = [...base, usuario, respuesta]
         setSesionId(r.sessionId)
-        setMensajes((m) => [
-          ...m,
-          {
-            tipo: "agente",
-            texto: r.reply,
-            llamadas: r.toolCalls,
-            pidioConfirmacion: r.needsConfirmation,
-            error: r.error?.mensaje ?? null,
-          },
-        ])
+        setMensajes(historial)
+        guardarHistorial(r.sessionId, historial)
         setPendiente(r.needsConfirmation ? r.pendingAction : null)
         setUso(r.usage)
         if (r.error) setAviso(r.error.mensaje)
 
-        const todas = [...mensajes.flatMap((m) => (m.tipo === "agente" ? m.llamadas : [])), ...r.toolCalls]
+        const todas = historial.flatMap((m) => (m.tipo === "agente" ? m.llamadas : []))
         const caso = casoDe(todas)
         setConversaciones((lista) =>
           actualizarConversacion(lista, {
@@ -129,7 +148,7 @@ export function useAgente() {
           }),
         )
       } catch (e) {
-        setMensajes((m) => m.slice(0, -1))
+        setMensajes(base)
         manejarError(e, () => void enviar(limpio, confirmar))
       } finally {
         setTrabajando(false)
@@ -137,7 +156,7 @@ export function useAgente() {
         setEnVivo([])
       }
     },
-    [trabajando, sesionId, mensajes, clienteDe, manejarError],
+    [trabajando, sesionId, mensajes, archivada, clienteDe, manejarError],
   )
 
   const nueva = useCallback(() => {
@@ -146,6 +165,7 @@ export function useAgente() {
     setPendiente(null)
     setUso(null)
     setAviso(null)
+    setArchivada(false)
   }, [])
 
   const abrir = useCallback(
@@ -158,17 +178,24 @@ export function useAgente() {
         setPendiente(s.pendingAction)
         setUso(s.usage)
         setAviso(null)
+        setArchivada(false)
       } catch (e) {
-        if (e instanceof ErrorApi && e.estado === 404) {
-          setConversaciones((l) => l.filter((c) => c.id !== id))
-          setAviso("Esa conversación ya expiró en el servidor. Empieza una nueva.")
-          nueva()
+        if (!(e instanceof ErrorApi && e.estado === 404)) {
+          manejarError(e, () => void abrir(id))
           return
         }
-        manejarError(e, () => void abrir(id))
+        // El servidor ya no tiene la sesión: se muestra la copia local y la conversación se conserva.
+        const copia = leerHistorial<Mensaje>(id)
+        setSesionId(id)
+        setMensajes(copia ?? [])
+        setPendiente(null)
+        setUso(null)
+        setArchivada(true)
+        setAviso(copia ? AVISO_ARCHIVADA : AVISO_SIN_COPIA)
+        setConversaciones((l) => l.map((c) => (c.id === id ? { ...c, estado: "solo lectura" } : c)))
       }
     },
-    [trabajando, manejarError, nueva],
+    [trabajando, manejarError],
   )
 
   const ingresarClave = useCallback((clave: string) => {
@@ -180,8 +207,22 @@ export function useAgente() {
   }, [])
 
   const estado: EstadoAgente = useMemo(
-    () => ({ salud, casos, conversaciones, sesionId, mensajes, trabajando, enVivo, enCurso, pendiente, uso, aviso, pideClave }),
-    [salud, casos, conversaciones, sesionId, mensajes, trabajando, enVivo, enCurso, pendiente, uso, aviso, pideClave],
+    () => ({
+      salud,
+      casos,
+      conversaciones,
+      sesionId,
+      mensajes,
+      trabajando,
+      enVivo,
+      enCurso,
+      pendiente,
+      uso,
+      aviso,
+      pideClave,
+      archivada,
+    }),
+    [salud, casos, conversaciones, sesionId, mensajes, trabajando, enVivo, enCurso, pendiente, uso, aviso, pideClave, archivada],
   )
   return { estado, enviar, nueva, abrir, ingresarClave, cerrarAviso: () => setAviso(null), clienteDe }
 }
