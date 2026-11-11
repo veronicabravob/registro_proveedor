@@ -18,13 +18,27 @@ export function exigirClave(esperada: string | undefined): MiddlewareHandler {
 }
 
 /**
+ * IP del cliente según `x-forwarded-for` y el número de proxies de confianza. Cada proxy AGREGA al
+ * final la IP que vio, así que los primeros valores los controla el cliente (falsificables): se toma
+ * el valor en la posición `proxies` contando desde el final. Con 0 proxies no se confía en el header.
+ */
+export function ipCliente(xForwardedFor: string | undefined, proxies: number): string {
+  if (proxies <= 0) return "directo"
+  const ips = (xForwardedFor ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean)
+  return ips[Math.max(0, ips.length - proxies)] ?? "local"
+}
+
+/**
  * Límite de solicitudes por IP en ventana deslizante de 60 s, en memoria.
  * Protege la clave del modelo de un uso sin límite (PRD §8 Costo).
  */
-export function limitarSolicitudes(porMinuto: number, ahora: () => number = Date.now): MiddlewareHandler {
+export function limitarSolicitudes(porMinuto: number, proxies = 1, ahora: () => number = Date.now): MiddlewareHandler {
   const ventanas = new Map<string, number[]>()
   return async (c, next) => {
-    const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "local"
+    const ip = ipCliente(c.req.header("x-forwarded-for"), proxies)
     const t = ahora()
     const recientes = (ventanas.get(ip) ?? []).filter((x) => t - x < 60_000)
     if (recientes.length >= porMinuto) {

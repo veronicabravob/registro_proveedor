@@ -93,3 +93,39 @@ export class AlmacenSesiones {
     for (const [id, s] of this.sesiones) if (s.actualizada < limite && !s.ocupada) this.sesiones.delete(id)
   }
 }
+
+/**
+ * Tope GLOBAL diario de tokens (PRD §8 Costo): suma el uso de todas las sesiones para que abrir
+ * sesiones nuevas no permita gastar la clave sin límite. En memoria; se reinicia al cambiar el día UTC.
+ */
+export class PresupuestoDiario {
+  private dia = ""
+  private usados = 0
+
+  constructor(
+    readonly limite: number,
+    private readonly ahora: () => number = Date.now,
+  ) {}
+
+  /** Tokens consumidos hoy (UTC). */
+  get consumidos(): number {
+    this.renovar()
+    return this.usados
+  }
+
+  agotado(): boolean {
+    return this.consumidos >= this.limite
+  }
+
+  registrar(tokens: number): void {
+    this.renovar()
+    this.usados += Math.max(0, tokens)
+  }
+
+  private renovar(): void {
+    const hoy = new Date(this.ahora()).toISOString().slice(0, 10)
+    if (hoy === this.dia) return
+    this.dia = hoy
+    this.usados = 0
+  }
+}

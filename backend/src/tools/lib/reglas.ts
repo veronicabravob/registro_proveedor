@@ -19,6 +19,10 @@ const ReglasSchema = z.object({
   campos_sensibles: z.array(z.string()),
   soportes: z.record(z.string(), z.string()),
   nombres_pais: z.record(z.string(), z.string()),
+  /** Tipos de dato que no pueden cruzarse en el mapeo: un "Teléfono …" nunca se llena con un nombre. */
+  tipos_de_dato: z.record(z.string(), z.array(z.string())).default({}),
+  /** Claves monetarias del maestro → clave de su moneda. */
+  campos_monetarios: z.record(z.string(), z.string()).default({}),
 })
 export type Reglas = z.infer<typeof ReglasSchema>
 

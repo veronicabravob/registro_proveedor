@@ -6,14 +6,16 @@ import { definirHerramienta, type Ejecucion } from "./lib/definir.ts"
 import { generarPdf, generarValoresPortal, generarXlsx } from "./lib/formularios.ts"
 import {
   equivalenteTributario,
+  filtrarMapeo,
   formatearValor,
   type Mapeo,
   MapeoArchivoSchema,
   mapearCampos,
   ocultarSensibles,
+  resolverEtiquetas,
   valorEnRuta,
 } from "./lib/mapeo.ts"
-import { bloqueosDeFirma, borradorCorreoMd, checklistMd, evaluarSoportes } from "./lib/paquete.ts"
+import { bloqueosDeFirma, borradorCorreoMd, checklistMd, evaluarSoportes, type SoporteEvaluado } from "./lib/paquete.ts"
 import { nombreSoporte, reglas } from "./lib/reglas.ts"
 import { casoArg, dirSalida, rutaRelativa, rutas } from "./lib/rutas.ts"
 import { hoyISO, normalizar } from "./lib/texto.ts"
@@ -34,6 +36,29 @@ interface ResultadoFormulario {
   soportado: boolean
   campos_escritos: number
   aviso?: string
+}
+
+/** Junto al formulario se guarda el mapeo_id con el que se generó (armar_paquete lo verifica). */
+const ARCHIVO_META_FORMULARIO = "formulario.meta.json"
+const MetaFormularioSchema = z.object({ mapeo_id: z.string(), archivo: z.string() })
+
+function guardarMetaFormulario(dir: string, mapeoId: string, archivo: string): void {
+  writeFileSync(join(dir, ARCHIVO_META_FORMULARIO), JSON.stringify({ mapeo_id: mapeoId, archivo }, null, 2), "utf8")
+}
+
+/** El formulario en disco solo vale si se generó con el mapeo vigente de la plantilla completa. */
+type EstadoFormulario = "vigente" | "ausente" | "desactualizado"
+
+function formularioVigente(dir: string, archivo: string, mapeo: Mapeo | null): EstadoFormulario {
+  if (!existsSync(join(dir, archivo))) return "ausente"
+  const ruta = join(dir, ARCHIVO_META_FORMULARIO)
+  if (!mapeo || !existsSync(ruta)) return "desactualizado"
+  try {
+    const meta = MetaFormularioSchema.parse(JSON.parse(readFileSync(ruta, "utf8")))
+    return meta.mapeo_id === mapeo.mapeo_id && meta.archivo === archivo ? "vigente" : "desactualizado"
+  } catch {
+    return "desactualizado"
+  }
 }
 
 const NOMBRE_FORMATO: Record<Formato, string> = { xlsx: "Plantilla de Excel", pdf: "Formulario PDF", portal: "Portal web" }
@@ -120,22 +145,26 @@ export const mapear_campos = definirHerramienta("proveedor_mapear_campos", {
   async run({ caso, campos }, ctx) {
     const { solicitud } = leerCaso(ctx, caso)
     const plantilla = leerPlantilla(ctx, caso, solicitud.formato)
-    const solicitados = campos.length
-      ? campos.map((etiqueta) => ({
-          etiqueta,
-          obligatorio: plantilla.campos.find((c) => c.etiqueta === etiqueta)?.obligatorio ?? null,
-        }))
-      : plantilla.campos
-    const mapeo = mapearCampos(caso, solicitados, solicitud.pais, leerMaestro(ctx), leerGlosario(ctx), reglas())
+    // Siempre se mapea y persiste la plantilla COMPLETA con sus etiquetas exactas: así el formulario
+    // nunca queda con blancos que el maestro sí tiene, aunque el modelo pida un subconjunto o
+    // reescriba una etiqueta (sin tilde, otra capitalización…).
+    const completo = mapearCampos(caso, plantilla.campos, solicitud.pais, leerMaestro(ctx), leerGlosario(ctx), reglas())
+    writeFileSync(
+      join(prepararSalida(ctx, caso), "mapeo.json"),
+      JSON.stringify({ campos: plantilla.campos, mapeo: completo }, null, 2),
+      "utf8",
+    )
 
-    // El mapeo se persiste: el formulario se genera desde aquí, de modo que ningún valor pasa por el modelo.
-    writeFileSync(join(prepararSalida(ctx, caso), "mapeo.json"), JSON.stringify({ campos: solicitados, mapeo }, null, 2), "utf8")
-
+    const { etiquetas, no_encontradas } = campos.length
+      ? resolverEtiquetas(campos, plantilla.campos)
+      : { etiquetas: plantilla.campos.map((c) => c.etiqueta), no_encontradas: [] }
+    const mapeo = filtrarMapeo(completo, etiquetas)
     const { llenos, faltantes, requiere_confirmacion } = mapeo
+    const aviso = no_encontradas.length ? ` ${no_encontradas.length} etiqueta(s) no existen en la plantilla.` : ""
     return {
       // Minimización de datos: el modelo (y sus trazas) nunca recibe valores sensibles completos.
-      data: ocultarSensibles(mapeo),
-      resumen: `${llenos.length} llenos, ${requiere_confirmacion.length} por confirmar, ${faltantes.length} sin dato.`,
+      data: { ...ocultarSensibles(mapeo), no_encontradas },
+      resumen: `${llenos.length} llenos, ${requiere_confirmacion.length} por confirmar, ${faltantes.length} sin dato.${aviso}`,
     }
   },
 })
@@ -172,6 +201,7 @@ export const generar_formulario = definirHerramienta("proveedor_generar_formular
       const plantilla = leerPlantilla(ctx, caso, "xlsx")
       if (plantilla.tipo !== "celdas") throw new ErrorDeHerramienta("La plantilla Excel no tiene celdas")
       const n = await generarXlsx(plantilla.celdas, mapeo, destino)
+      guardarMetaFormulario(dir, mapeo.mapeo_id, ARCHIVO_FORMULARIO.xlsx)
       return {
         data: { ruta, formato: "xlsx", soportado: true, campos_escritos: n },
         resumen: `En el mismo formato del cliente (Excel): ${ruta}`,
@@ -180,12 +210,14 @@ export const generar_formulario = definirHerramienta("proveedor_generar_formular
     if (solicitud.formato === "pdf") {
       const plantilla = leerPlantilla(ctx, caso, "pdf")
       const n = await generarPdf(plantilla.campos, mapeo, enc, destino)
+      guardarMetaFormulario(dir, mapeo.mapeo_id, ARCHIVO_FORMULARIO.pdf)
       return {
         data: { ruta, formato: "pdf", soportado: true, campos_escritos: n },
         resumen: `En el mismo formato del cliente (PDF): ${ruta}`,
       }
     }
     const n = await generarValoresPortal(campos, mapeo, enc, destino)
+    guardarMetaFormulario(dir, mapeo.mapeo_id, ARCHIVO_FORMULARIO.portal)
     return {
       data: {
         ruta,
@@ -194,10 +226,26 @@ export const generar_formulario = definirHerramienta("proveedor_generar_formular
         aviso: "formato no soportado: el portal web no se llena automáticamente; se generaron los valores listos para copiar",
         campos_escritos: n,
       },
-      resumen: `Este cliente usa un portal web: dejé los valores listos para copiar en ${ruta}`,
+      // HU-3 P2: el PRD exige responder literalmente "formato no soportado".
+      resumen: `formato no soportado: este cliente usa un portal web; dejé los valores listos para copiar en ${ruta}`,
     }
   },
 })
+
+/** Una línea para el chat: listo para firma o qué lo impide. */
+function resumenPaquete(soportes: readonly SoporteEvaluado[], formulario: EstadoFormulario): string {
+  const conteo = (e: string): number => soportes.filter((s) => s.estado === e).length
+  const vencidos = conteo("vencido")
+  const ausentes = conteo("ausente")
+  const motivos = [
+    vencidos ? cantidad(vencidos, "soporte vencido", "soportes vencidos") : "",
+    ausentes ? cantidad(ausentes, "soporte ausente", "soportes ausentes") : "",
+    formulario === "vigente" ? "" : formulario === "desactualizado" ? "formulario desactualizado" : "falta el formulario",
+  ].filter(Boolean)
+  return motivos.length
+    ? `No está listo para firma: ${motivos.join(", ")}.`
+    : `Listo para firma: los ${conteo("presente")} soportes están vigentes.`
+}
 
 // ── HU-4 ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -216,8 +264,11 @@ export const armar_paquete = definirHerramienta("proveedor_armar_paquete", {
     const { mapeo, error: errorPlantilla } = mapeoCompleto(ctx, caso)
     const nombreFormulario = ARCHIVO_FORMULARIO[solicitud.formato]
     const origenFormulario = join(dir, nombreFormulario)
+    // Solo se empaqueta un formulario generado con el mapeo vigente; uno de una ejecución anterior
+    // (otro maestro, otra plantilla, otras reglas) bloquea la firma en vez de colarse en el paquete.
+    const estadoFormulario = formularioVigente(dir, nombreFormulario, mapeo)
     let formulario: string | null = null
-    if (existsSync(origenFormulario)) {
+    if (estadoFormulario === "vigente") {
       copyFileSync(origenFormulario, join(dirPaquete, nombreFormulario))
       formulario = rutaRelativa(ctx, join(dirPaquete, nombreFormulario))
     }
@@ -235,7 +286,7 @@ export const armar_paquete = definirHerramienta("proveedor_armar_paquete", {
       adjuntos.push(`${s.nombre} (${s.archivo})`)
     }
 
-    const bloqueos = bloqueosDeFirma(soportes, formulario, errorPlantilla)
+    const bloqueos = bloqueosDeFirma(soportes, formulario, errorPlantilla, estadoFormulario === "desactualizado")
     const listo_para_firma = bloqueos.length === 0
     const r = reglas()
     writeFileSync(
@@ -255,7 +306,6 @@ export const armar_paquete = definirHerramienta("proveedor_armar_paquete", {
       "utf8",
     )
 
-    const conteo = (e: string): number => soportes.filter((s) => s.estado === e).length
     return {
       data: {
         ruta: rutaRelativa(ctx, dirPaquete),
@@ -275,9 +325,7 @@ export const armar_paquete = definirHerramienta("proveedor_armar_paquete", {
           ...soportes.flatMap((s) => (s.archivo && s.estado !== "ausente" ? [s.archivo] : [])),
         ],
       },
-      resumen: listo_para_firma
-        ? `Listo para firma: los ${conteo("presente")} soportes están vigentes.`
-        : `No está listo para firma: ${[conteo("vencido") ? `${cantidad(conteo("vencido"), "soporte vencido", "soportes vencidos")}` : "", conteo("ausente") ? `${cantidad(conteo("ausente"), "soporte ausente", "soportes ausentes")}` : "", formulario ? "" : "falta el formulario"].filter(Boolean).join(", ")}.`,
+      resumen: resumenPaquete(soportes, estadoFormulario),
     }
   },
 })

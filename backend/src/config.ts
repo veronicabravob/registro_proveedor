@@ -30,10 +30,12 @@ const EntornoSchema = z.object({
 
   MAX_ITERATIONS_PER_TURN: z.coerce.number().int().min(1).max(100).default(25),
   MAX_TOKENS_PER_SESSION: z.coerce.number().int().min(10000).default(400000),
+  MAX_TOKENS_PER_DAY: z.coerce.number().int().min(10000).default(3_000_000),
   MAX_SESSIONS: z.coerce.number().int().min(1).default(200),
   SESSION_TTL_MINUTES: z.coerce.number().int().min(1).default(120),
   MAX_MESSAGE_CHARS: z.coerce.number().int().min(100).max(20000).default(4000),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(20),
+  TRUSTED_PROXIES: z.coerce.number().int().min(0).max(10).default(1),
   APP_ACCESS_KEY: opcional,
   FECHA_EJECUCION: z
     .string()
@@ -67,10 +69,14 @@ export interface Configuracion {
   limites: {
     iteracionesPorTurno: number
     tokensPorSesion: number
+    /** Tope global de tokens por día UTC, sumando todas las sesiones (PRD §8). */
+    tokensPorDia: number
     sesiones: number
     ttlSesionMs: number
     caracteresMensaje: number
     solicitudesPorMinuto: number
+    /** Proxies de confianza delante del servidor: la IP del cliente se toma de x-forwarded-for contando desde el final. */
+    proxiesConfianza: number
   }
   claveAcceso: string | undefined
   fechaEjecucion: string | undefined
@@ -119,10 +125,12 @@ export function cargarConfiguracion(env: NodeJS.ProcessEnv = process.env, leerAr
     limites: {
       iteracionesPorTurno: e.MAX_ITERATIONS_PER_TURN,
       tokensPorSesion: e.MAX_TOKENS_PER_SESSION,
+      tokensPorDia: e.MAX_TOKENS_PER_DAY,
       sesiones: e.MAX_SESSIONS,
       ttlSesionMs: e.SESSION_TTL_MINUTES * 60_000,
       caracteresMensaje: e.MAX_MESSAGE_CHARS,
       solicitudesPorMinuto: e.RATE_LIMIT_PER_MINUTE,
+      proxiesConfianza: e.TRUSTED_PROXIES,
     },
     claveAcceso: e.APP_ACCESS_KEY,
     fechaEjecucion: e.FECHA_EJECUCION,

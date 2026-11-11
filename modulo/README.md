@@ -8,8 +8,12 @@ herramientas tipadas con zod.
 
 | Opción | Cómo |
 |---|---|
-| **Release (recomendado)** | Descargar [`agente-registro-proveedor.zip`](https://github.com/veronicabravob/registro_proveedor/releases/latest/download/agente-registro-proveedor.zip) desde la última release del repositorio. |
+| **Release (recomendado)** | [`agente-registro-proveedor.zip`](https://github.com/veronicabravob/registro_proveedor/releases/latest/download/agente-registro-proveedor.zip): enlace estable que siempre apunta a la última release. |
+| Una versión concreta | Elegirla en [Releases](https://github.com/veronicabravob/registro_proveedor/releases); cada tag `v*` publica su propio `.zip`. |
 | Desde el código | Clonar el repositorio y ejecutar `npm install && npm run modulo:empaquetar`; el paquete queda en `dist/agente-registro-proveedor/`. |
+
+El `.zip` de cada release lo arma el workflow `publicar-agente.yml` desde las mismas fuentes que la
+app, y lo instala y prueba de forma aislada antes de adjuntarlo (ver sección 5).
 
 ## 2. Contenido
 
