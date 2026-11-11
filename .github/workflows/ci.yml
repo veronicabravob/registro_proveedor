@@ -67,7 +67,7 @@ jobs:
           test -f out/hn-agroexport-sula/formulario.xlsx
           test -f out/pa-logistica-istmo/valores-portal.md
           test -f out/ec-corp-andina/paquete/checklist.md
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: demo-out
           path: out/
