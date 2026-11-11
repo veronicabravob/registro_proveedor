@@ -35,9 +35,14 @@ export function bloqueosDeFirma(
   soportes: readonly SoporteEvaluado[],
   formulario: string | null,
   errorPlantilla: string | null,
+  formularioDesactualizado = false,
 ): string[] {
   const bloqueos: string[] = []
-  if (!formulario) bloqueos.push(errorPlantilla ? `Formulario no generado: ${errorPlantilla}` : "Formulario no generado")
+  if (!formulario) {
+    if (errorPlantilla) bloqueos.push(`Formulario no generado: ${errorPlantilla}`)
+    else if (formularioDesactualizado) bloqueos.push("formulario desactualizado: vuelve a generarlo")
+    else bloqueos.push("Formulario no generado")
+  }
   for (const s of soportes) {
     if (s.estado === "vencido") bloqueos.push(`Soporte vencido: ${s.nombre} (vigente hasta ${s.vigencia_hasta})`)
     if (s.estado === "ausente") bloqueos.push(`Soporte exigido ausente: ${s.nombre}`)

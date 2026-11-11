@@ -22,6 +22,20 @@
     "banco.moneda"
   ],
   "campos_sensibles": ["banco.numero_cuenta", "banco.swift", "representante_legal.identificacion"],
+  "tipos_de_dato": {
+    "telefono": ["telefono", "celular", "movil", "fax", "whatsapp"],
+    "correo": ["correo", "email", "e mail", "mail"],
+    "nombre": ["nombre", "nombres", "razon social"],
+    "direccion": ["direccion", "domicilio"],
+    "cuenta": ["cuenta"],
+    "identificacion": ["cedula", "identificacion", "nit", "ruc", "rtn", "documento"],
+    "cargo": ["cargo"],
+    "fecha": ["fecha"],
+    "web": ["web", "sitio", "pagina"]
+  },
+  "campos_monetarios": {
+    "ingresos_ultimo_ano.valor": "ingresos_ultimo_ano.moneda"
+  },
   "soportes": {
     "camara_comercio": "Certificado de existencia y representación legal (Cámara de Comercio)",
     "rut": "Registro Único Tributario (RUT)",

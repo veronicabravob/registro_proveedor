@@ -85,11 +85,34 @@ describe("HU-2 · mapear_campos", () => {
     assert.deepEqual(etiquetas(ec.faltantes), ["Número de contribuyente especial"])
   })
 
-  it("etiqueta parecida con baja confianza → requiere_confirmacion", async () => {
+  it("etiqueta que no está en la plantilla se reporta como no encontrada", async () => {
     const d = await ejecutar(
       proveedor.mapear_campos.execute({ caso: "co-industrias-delta", campos: ["Nombre legal de la empresa proveedora"] }, ctx),
     )
-    assert.deepEqual(etiquetas(d.requiere_confirmacion), ["Nombre legal de la empresa proveedora"])
+    assert.deepEqual(d.no_encontradas, ["Nombre legal de la empresa proveedora"])
+    assert.deepEqual([d.llenos, d.faltantes, d.requiere_confirmacion], [[], [], []])
+  })
+
+  it("etiquetas reescritas por el modelo (sin tilde) → etiqueta exacta y formulario completo", async () => {
+    const caso = "co-industrias-delta"
+    const d = await ejecutar(proveedor.mapear_campos.execute({ caso, campos: ["Direccion", "razon social"] }, ctx))
+    assert.deepEqual(etiquetas(d.llenos), ["Razón social", "Dirección"])
+    assert.deepEqual(d.no_encontradas, [])
+    await ejecutar(proveedor.generar_formulario.execute({ caso, mapeo: String(d.mapeo_id) }, ctx))
+    const libro = new ExcelJS.Workbook()
+    await libro.xlsx.readFile(join(ctx.directory, "out/co-industrias-delta/formulario.xlsx"))
+    const hoja = libro.getWorksheet("Datos Proveedor")
+    assert.equal(hoja?.getCell("C6").value, "Calle 10 # 43A-25, Oficina 501")
+    assert.equal(hoja?.getCell("C4").value, "900123456") // no pedido por el modelo, pero el maestro lo tiene
+  })
+
+  it("ingresos con la moneda del maestro en el formulario", async () => {
+    const caso = "hn-agroexport-sula"
+    const d = await ejecutar(proveedor.mapear_campos.execute({ caso, campos: [] }, ctx))
+    await ejecutar(proveedor.generar_formulario.execute({ caso, mapeo: String(d.mapeo_id) }, ctx))
+    const libro = new ExcelJS.Workbook()
+    await libro.xlsx.readFile(join(ctx.directory, "out/hn-agroexport-sula/formulario.xlsx"))
+    assert.equal(libro.getWorksheet("Registro")?.getCell("B11").value, "COP 98.000.000.000")
   })
 })
 
@@ -109,6 +132,12 @@ describe("HU-3 · generar_formulario", () => {
     assert.ok(existsSync(join(ctx.directory, "out/ec-corp-andina/formulario.pdf")))
     const portal = await procesar("pa-logistica-istmo")
     assert.ok(portal.mapeo)
+    const mapeo = await ejecutar(proveedor.mapear_campos.execute({ caso: "pa-logistica-istmo", campos: [] }, ctx))
+    const r = leerResultado(
+      await proveedor.generar_formulario.execute({ caso: "pa-logistica-istmo", mapeo: String(mapeo.mapeo_id) }, ctx),
+    )
+    assert.ok(r.ok)
+    assert.match(r.ok ? String(r.data.resumen) : "", /^formato no soportado/) // HU-3 P2: literal exigido por el PRD
     const md = readFileSync(join(ctx.directory, "out/pa-logistica-istmo/valores-portal.md"), "utf8")
     assert.match(md, /Formato no soportado/)
   })
@@ -138,6 +167,24 @@ describe("HU-4 · armar_paquete", () => {
     assert.equal(ec.paquete.listo_para_firma, false)
     assert.match(String(ec.paquete.bloqueos), /cumplimiento tributario/)
     assert.doesNotMatch(String(ec.paquete.bloqueos), /contribuyente especial/)
+  })
+
+  it("un formulario de una ejecución anterior (otro mapeo) no entra al paquete", async () => {
+    const caso = "co-industrias-delta"
+    await procesar(caso)
+    const archivoMaestro = join(ctx.directory, "fixtures/reto-01/repositorio/maestro.json")
+    const original = readFileSync(archivoMaestro, "utf8")
+    try {
+      writeFileSync(archivoMaestro, original.replace("+57 604 555 0100", "+57 604 555 9999"))
+      const paquete = await ejecutar(proveedor.armar_paquete.execute({ caso }, ctx))
+      assert.equal(paquete.listo_para_firma, false)
+      assert.match(String(paquete.bloqueos), /formulario desactualizado: vuelve a generarlo/)
+      assert.ok(!existsSync(join(ctx.directory, "out/co-industrias-delta/paquete/formulario.xlsx")))
+      const regenerado = await procesar(caso)
+      assert.equal(regenerado.paquete.listo_para_firma, true)
+    } finally {
+      writeFileSync(archivoMaestro, original)
+    }
   })
 
   it("RN5: cada ejecución queda en out/<caso>/log.jsonl", async () => {

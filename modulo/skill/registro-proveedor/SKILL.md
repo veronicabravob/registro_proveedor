@@ -19,7 +19,14 @@ Los parámetros que las herramientas aplican de forma determinista viven en
 3. **Mapear campos** contra el repositorio maestro de Periferia. Cada campo queda en uno de tres estados:
    - `lleno`: el valor existe en el maestro; se registra la ruta del dato (`maestro.json#<clave>`).
    - `faltante`: no existe en el maestro. **Nunca se inventa un valor.**
-   - `requiere_confirmacion`: mapeo con confianza < 0.8 o aplica una regla de país.
+   - `requiere_confirmacion`: coincidencia aproximada (nunca queda `lleno`, sin importar la
+     confianza), aplica una regla de país o falta un dato complementario (p. ej. la moneda).
+   - Una etiqueta que pide un tipo de dato (teléfono, correo, nombre, dirección, cuenta…) nunca se
+     resuelve a un sinónimo de otro tipo (`reglas.json#tipos_de_dato`): "Teléfono del representante
+     legal" no se llena con su nombre.
+   - Los valores monetarios (`reglas.json#campos_monetarios`) se escriben con la moneda del maestro
+     (p. ej. "COP 98.000.000.000"); si el maestro no tiene la moneda, quedan por confirmar.
+   - Siempre se mapea la plantilla completa, con sus etiquetas exactas.
 4. **Generar el formulario** en el mismo formato que envió el cliente.
 5. **Armar el paquete para firma**: formulario, soportes, checklist y borrador de correo.
 6. **Cierre humano**: la analista revisa; el representante legal firma; la analista decide el envío.
@@ -50,6 +57,7 @@ etiqueta genérica (p. ej. "Identificación tributaria") se propone el equivalen
 | Soporte exigido con `vigencia_hasta` anterior a la fecha de ejecución (vencido) | Sí                               |
 | Soporte exigido que no existe en el repositorio (ausente)                       | Sí                               |
 | Formulario no generado                                                          | Sí                               |
+| Formulario generado con un mapeo anterior (desactualizado)                      | Sí                               |
 | Campo `faltante`                                                                | No, pero aparece en el checklist |
 | Campo `requiere_confirmacion`                                                   | No, pero aparece en el checklist |
 

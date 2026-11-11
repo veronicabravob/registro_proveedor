@@ -163,17 +163,21 @@ interface CampoPdf {
 
 const anchoColumnas = (n: number): number => n * COLUMNA + (n - 1) * GUTTER
 
-function notaLegible(mapeo: Mapeo, etiqueta: string, estado: CampoPdf["estado"], paisCliente: string): string | null {
+export function notaLegible(mapeo: Mapeo, etiqueta: string, estado: CampoPdf["estado"], paisCliente: string): string | null {
   if (estado === "faltante") return "No existe en el repositorio maestro; se deja en blanco para completar a mano."
   if (estado === "lleno") return null
   const pc = mapeo.requiere_confirmacion.find((c) => c.etiqueta === etiqueta)
-  if (pc?.equivalente_pais) {
-    const pais = reglas().nombres_pais[paisCliente] ?? paisCliente
+  if (!pc) return null
+  const r = reglas()
+  // Cliente extranjero: se explica el NIT. En Colombia el NIT SÍ es el identificador: la nota es
+  // el motivo real del mapeo (p. ej. etiqueta ambigua), nunca "no tiene identificador en Colombia".
+  if (pc.equivalente_pais && paisCliente !== r.pais_maestro) {
+    const pais = r.nombres_pais[paisCliente] ?? paisCliente
     return `Es el NIT colombiano: el cliente pide ${pc.equivalente_pais} y Periferia no tiene identificador en ${pais}.`
   }
-  if (pc?.motivo.startsWith("mapeo con confianza"))
+  if (pc.motivo.startsWith("mapeo con confianza"))
     return "El dato salió de un campo parecido del maestro; verificar que corresponda."
-  return pc?.motivo ?? null
+  return `${pc.motivo.charAt(0).toUpperCase()}${pc.motivo.slice(1)}.`
 }
 
 function prepararCampos(campos: readonly CampoSolicitado[], mapeo: Mapeo, paisCliente: string, f: Fuentes): CampoPdf[] {
