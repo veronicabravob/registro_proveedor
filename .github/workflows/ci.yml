@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches-ignore: ["dependabot/**"]
   pull_request:
   workflow_dispatch:
 
@@ -19,30 +19,30 @@ env:
 jobs:
   lint:
     name: Lint y formato (Biome)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
         with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
       - run: npm ci
       - run: npx biome ci .
 
   typecheck:
     name: Tipos (tsc estricto, sin any)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
         with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
       - run: npm ci
       - run: npm run typecheck
 
   test:
     name: Pruebas y cobertura
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
         with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
       - run: npm ci
       - name: Pruebas con umbral de cobertura (quality gate)
@@ -50,10 +50,10 @@ jobs:
 
   demo:
     name: demo.ts sin modelo (PRD §6.6)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
         with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
       - run: npm ci
       - name: Ejecutar demo sin claves de proveedor
@@ -67,7 +67,7 @@ jobs:
           test -f out/hn-agroexport-sula/formulario.xlsx
           test -f out/pa-logistica-istmo/valores-portal.md
           test -f out/ec-corp-andina/paquete/checklist.md
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: demo-out
           path: out/
@@ -75,19 +75,19 @@ jobs:
 
   audit:
     name: Auditoría de dependencias
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
         with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
       - run: npm audit --omit=dev --audit-level=high
 
   secrets:
     name: Escaneo de secretos (gitleaks)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
