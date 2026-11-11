@@ -86,7 +86,9 @@ describe("HU-2 · mapear_campos", () => {
   })
 
   it("etiqueta parecida con baja confianza → requiere_confirmacion", async () => {
-    const d = await ejecutar(proveedor.mapear_campos.execute({ caso: "co-industrias-delta", campos: ["Nombre legal de la empresa proveedora"] }, ctx))
+    const d = await ejecutar(
+      proveedor.mapear_campos.execute({ caso: "co-industrias-delta", campos: ["Nombre legal de la empresa proveedora"] }, ctx),
+    )
     assert.deepEqual(etiquetas(d.requiere_confirmacion), ["Nombre legal de la empresa proveedora"])
   })
 })
@@ -152,7 +154,10 @@ describe("RN4 · simular_envio", () => {
     const sinArg = leerResultado(await proveedor.simular_envio.execute({ caso: "co-industrias-delta", confirmado: false }, ctx))
     assert.deepEqual(sinArg, { ok: false, error: "requiere confirmación explícita" })
     const sinHost = leerResultado(
-      await proveedor.simular_envio.execute({ caso: "co-industrias-delta", confirmado: true }, { ...ctx, confirmaciones: new Set() }),
+      await proveedor.simular_envio.execute(
+        { caso: "co-industrias-delta", confirmado: true },
+        { ...ctx, confirmaciones: new Set() },
+      ),
     )
     assert.equal(sinHost.ok, false)
   })

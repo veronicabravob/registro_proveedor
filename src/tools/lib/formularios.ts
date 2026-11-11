@@ -97,7 +97,10 @@ class EscritorPdf {
     return this.pagina.getWidth() - 2 * EscritorPdf.MARGEN
   }
 
-  texto(texto: string, opciones: { tamano?: number; negrita?: boolean; color?: [number, number, number]; espacio?: number } = {}): void {
+  texto(
+    texto: string,
+    opciones: { tamano?: number; negrita?: boolean; color?: [number, number, number]; espacio?: number } = {},
+  ): void {
     const tamano = opciones.tamano ?? 10
     const fuente = opciones.negrita ? this.negrita : this.normal
     const [r, g, b] = opciones.color ?? [0.1, 0.1, 0.12]

@@ -1,4 +1,4 @@
-import type { SoporteIndice, Solicitud } from "./datos.ts"
+import type { Solicitud, SoporteIndice } from "./datos.ts"
 import type { Mapeo } from "./mapeo.ts"
 import { nombreSoporte } from "./reglas.ts"
 
@@ -17,7 +17,8 @@ export interface SoporteEvaluado {
 export function evaluarSoportes(exigidos: readonly string[], indice: readonly SoporteIndice[], fecha: string): SoporteEvaluado[] {
   return exigidos.map((tipo) => {
     const s = indice.find((i) => i.tipo === tipo)
-    if (!s) return { tipo, nombre: nombreSoporte(tipo), estado: "ausente", archivo: null, vigencia_hasta: null, pais_emisor: null }
+    if (!s)
+      return { tipo, nombre: nombreSoporte(tipo), estado: "ausente", archivo: null, vigencia_hasta: null, pais_emisor: null }
     const vencido = s.vigencia_hasta !== null && s.vigencia_hasta < fecha
     return {
       tipo,
@@ -30,7 +31,11 @@ export function evaluarSoportes(exigidos: readonly string[], indice: readonly So
   })
 }
 
-export function bloqueosDeFirma(soportes: readonly SoporteEvaluado[], formulario: string | null, errorPlantilla: string | null): string[] {
+export function bloqueosDeFirma(
+  soportes: readonly SoporteEvaluado[],
+  formulario: string | null,
+  errorPlantilla: string | null,
+): string[] {
   const bloqueos: string[] = []
   if (!formulario) bloqueos.push(errorPlantilla ? `Formulario no generado: ${errorPlantilla}` : "Formulario no generado")
   for (const s of soportes) {
@@ -73,18 +78,25 @@ export function checklistMd(p: {
     "| Soporte | Estado | Archivo | Vigente hasta | Emisor |",
     "|---|---|---|---|---|",
     ...p.soportes.map(
-      (s) => `| ${s.nombre} | ${ICONO[s.estado]} | ${s.archivo ?? "—"} | ${s.vigencia_hasta ?? "no aplica"} | ${s.pais_emisor ?? "—"} |`,
+      (s) =>
+        `| ${s.nombre} | ${ICONO[s.estado]} | ${s.archivo ?? "—"} | ${s.vigencia_hasta ?? "no aplica"} | ${s.pais_emisor ?? "—"} |`,
     ),
     "",
   )
   const extranjeros = p.soportes.filter((s) => s.pais_emisor && s.pais_emisor !== p.solicitud.pais && s.estado !== "ausente")
   if (extranjeros.length && p.solicitud.pais !== p.paisMaestro) {
-    lineas.push(`> Nota: los soportes son emitidos en ${p.paisMaestro}; el cliente es de ${p.solicitud.pais}. Verificar si los acepta.`, "")
+    lineas.push(
+      `> Nota: los soportes son emitidos en ${p.paisMaestro}; el cliente es de ${p.solicitud.pais}. Verificar si los acepta.`,
+      "",
+    )
   }
 
   if (p.mapeo) {
     lineas.push("## Campos faltantes (no bloquean la firma)", "")
-    lineas.push(...(p.mapeo.faltantes.length ? p.mapeo.faltantes.map((f) => `- [ ] ${f.etiqueta} — ${f.motivo}`) : ["- Ninguno"]), "")
+    lineas.push(
+      ...(p.mapeo.faltantes.length ? p.mapeo.faltantes.map((f) => `- [ ] ${f.etiqueta} — ${f.motivo}`) : ["- Ninguno"]),
+      "",
+    )
     lineas.push("## Campos que requieren confirmación (no bloquean la firma)", "")
     lineas.push(
       ...(p.mapeo.requiere_confirmacion.length
@@ -93,7 +105,14 @@ export function checklistMd(p: {
       "",
     )
   }
-  lineas.push("## Cierre humano", "", "- [ ] Revisión de la analista", "- [ ] Firma del representante legal", "- [ ] Envío al cliente", "")
+  lineas.push(
+    "## Cierre humano",
+    "",
+    "- [ ] Revisión de la analista",
+    "- [ ] Firma del representante legal",
+    "- [ ] Envío al cliente",
+    "",
+  )
   return lineas.join("\n")
 }
 

@@ -12,7 +12,10 @@
     "start": "tsx src/server.ts",
     "demo": "tsx demo.ts",
     "test": "node --import tsx --test \"test/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-include=\"src/tools/**\" --test-coverage-include=\"src/agent/**\" --test-coverage-lines=85 --test-coverage-branches=75 --test-coverage-functions=85 \"test/**/*.test.ts\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
@@ -33,6 +36,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.6",
     "@types/node": "^26.6.6",
     "typescript": "^7.0.2"
   }

@@ -32,18 +32,28 @@ export function definirHerramienta<A extends z.ZodRawShape, T extends object>(no
       const parsed = esquema.safeParse(args)
       if (!parsed.success) return JSON.stringify({ ok: false, error: `Argumentos inválidos: ${describirErrores(parsed.error)}` })
 
-      const caso = typeof (parsed.data as { caso?: unknown }).caso === "string" ? (parsed.data as { caso: string }).caso : undefined
+      const caso = casoDe(parsed.data)
       try {
         const { data, resumen } = await def.run(parsed.data, ctx)
         if (caso) registrarEnCaso(ctx, caso, { herramienta: nombre, ok: true, resumen })
         return JSON.stringify({ ok: true, data: { ...data, resumen } })
       } catch (e) {
-        const error =
-          e instanceof ErrorDeHerramienta ? e.message : `Error interno en ${nombre}. El detalle quedó en el log del servidor.`
-        if (!(e instanceof ErrorDeHerramienta)) process.stderr.write(`[${nombre}] ${e instanceof Error ? e.message : String(e)}\n`)
+        const error = mensajeDeError(nombre, e)
         if (caso) registrarEnCaso(ctx, caso, { herramienta: nombre, ok: false, resumen: error })
         return JSON.stringify({ ok: false, error })
       }
     },
   }
+}
+
+function casoDe(args: object): string | undefined {
+  const caso: unknown = (args as { caso?: unknown }).caso
+  return typeof caso === "string" ? caso : undefined
+}
+
+/** Errores de negocio se muestran tal cual; los inesperados se ocultan al modelo y van al log del servidor. */
+function mensajeDeError(nombre: string, e: unknown): string {
+  if (e instanceof ErrorDeHerramienta) return e.message
+  process.stderr.write(`[${nombre}] ${e instanceof Error ? e.message : String(e)}\n`)
+  return `Error interno en ${nombre}. El detalle quedó en el log del servidor.`
 }

@@ -19,13 +19,13 @@ Los parámetros que las herramientas aplican de forma determinista viven en
 
 ## Identificador tributario por país (RN1)
 
-| País | Código | Identificador |
-|---|---|---|
-| Colombia | CO | NIT |
-| Ecuador | EC | RUC |
-| Perú | PE | RUC |
-| Panamá | PA | RUC |
-| Honduras | HN | RTN |
+| País     | Código | Identificador |
+| -------- | ------ | ------------- |
+| Colombia | CO     | NIT           |
+| Ecuador  | EC     | RUC           |
+| Perú     | PE     | RUC           |
+| Panamá   | PA     | RUC           |
+| Honduras | HN     | RTN           |
 
 Periferia solo tiene NIT colombiano. Para clientes de otros países el campo se llena con el NIT
 y se marca `requiere_confirmacion` con la nota "identificador extranjero". Si la plantilla usa una
@@ -38,13 +38,13 @@ etiqueta genérica (p. ej. "Identificación tributaria") se propone el equivalen
 
 ## Soportes y bloqueo de firma (RN3)
 
-| Situación | ¿Bloquea `listo_para_firma`? |
-|---|---|
-| Soporte exigido con `vigencia_hasta` anterior a la fecha de ejecución (vencido) | Sí |
-| Soporte exigido que no existe en el repositorio (ausente) | Sí |
-| Formulario no generado | Sí |
-| Campo `faltante` | No, pero aparece en el checklist |
-| Campo `requiere_confirmacion` | No, pero aparece en el checklist |
+| Situación                                                                       | ¿Bloquea `listo_para_firma`?     |
+| ------------------------------------------------------------------------------- | -------------------------------- |
+| Soporte exigido con `vigencia_hasta` anterior a la fecha de ejecución (vencido) | Sí                               |
+| Soporte exigido que no existe en el repositorio (ausente)                       | Sí                               |
+| Formulario no generado                                                          | Sí                               |
+| Campo `faltante`                                                                | No, pero aparece en el checklist |
+| Campo `requiere_confirmacion`                                                   | No, pero aparece en el checklist |
 
 El certificado de Cámara de Comercio tiene vigencia de 30 días: si está vencido hay que solicitar uno nuevo.
 Los soportes de Periferia son emitidos en Colombia; si el cliente es extranjero, se informa el país emisor.
