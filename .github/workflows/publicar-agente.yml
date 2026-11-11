@@ -30,7 +30,7 @@ jobs:
           cd "$RUNNER_TEMP/agente" && npm install --no-audit --no-fund && npm run ejemplo
       - name: Comprimir
         run: cd dist && zip -qr agente-registro-proveedor.zip agente-registro-proveedor
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/agente-registro-proveedor.zip
           generate_release_notes: true
