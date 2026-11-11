@@ -190,6 +190,13 @@ export function crearApp(o: OpcionesApp): Hono {
   })
 
   const web = o.dirWeb ?? join(o.raiz, "frontend", "dist")
+  // Caché del front: los archivos de /assets llevan hash en el nombre (inmutables); el HTML y el
+  // resto se revalidan siempre, para que un despliegue nuevo se vea sin recargar a la fuerza.
+  app.use("/*", async (c, next) => {
+    await next()
+    if (c.req.path.startsWith("/api/")) return
+    c.header("Cache-Control", c.req.path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache")
+  })
   app.use("/*", serveStatic({ root: relative(process.cwd(), web) || "." }))
   return app
 }

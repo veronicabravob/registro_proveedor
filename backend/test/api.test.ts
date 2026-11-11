@@ -201,3 +201,13 @@ describe("streaming", () => {
     assert.equal((await app({ llm: null }).request("/api/chat/stream", post({ message: "x" }))).status, 503)
   })
 })
+
+describe("caché del front", () => {
+  it("el HTML se revalida siempre y los assets con hash son inmutables", async () => {
+    const a = app()
+    assert.equal((await a.request("/")).headers.get("cache-control"), "no-cache")
+    mkdirSync(join(dir, "web", "assets"), { recursive: true })
+    writeFileSync(join(dir, "web", "assets", "index-abc123.js"), "export {}")
+    assert.match((await a.request("/assets/index-abc123.js")).headers.get("cache-control") ?? "", /immutable/)
+  })
+})
