@@ -21,7 +21,9 @@ const log = (nivel: "info" | "warn" | "error", mensaje: string, extra: Record<st
   process.stdout.write(`${JSON.stringify({ ts: new Date().toISOString(), nivel, mensaje, ...extra })}\n`)
 }
 
-const raiz = fileURLToPath(new URL("..", import.meta.url))
+// Raíz del repositorio (fixtures/ y out/) y carpeta del backend (prompt y conocimiento).
+const raiz = fileURLToPath(new URL("../..", import.meta.url))
+const dirBackend = fileURLToPath(new URL("..", import.meta.url))
 const config = cargarConfiguracion()
 const almacen = new AlmacenSesiones(config.limites.sesiones, config.limites.ttlSesionMs)
 const telemetria = iniciarTelemetria(config, crearEnmascarador(valoresSensibles({ directory: raiz })), () => almacen.tamano)
@@ -32,7 +34,7 @@ const ciclo: DependenciasCiclo | null = llm
   ? {
       llm,
       herramientas,
-      sistema: cargarSistema(raiz),
+      sistema: cargarSistema(dirBackend),
       directorio: raiz,
       limites: { iteraciones: config.limites.iteracionesPorTurno, tokensSesion: config.limites.tokensPorSesion },
       ...(config.fechaEjecucion ? { fechaEjecucion: config.fechaEjecucion } : {}),

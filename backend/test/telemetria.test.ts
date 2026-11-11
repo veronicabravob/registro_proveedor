@@ -23,7 +23,7 @@ import { crearObservadorOtel } from "../src/telemetry/observador-otel.ts"
 import { herramientas } from "../src/tools/index.ts"
 import { valoresSensibles } from "../src/tools/lib/sensibles.ts"
 
-const raiz = fileURLToPath(new URL("..", import.meta.url))
+const raiz = fileURLToPath(new URL("../..", import.meta.url))
 const spans = new InMemorySpanExporter()
 const metricas = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE)
 const lector = new PeriodicExportingMetricReader({ exporter: metricas, exportIntervalMillis: 60_000 })

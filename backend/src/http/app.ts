@@ -161,7 +161,7 @@ export function crearApp(o: OpcionesApp): Hono {
     return c.json({ error: "Error interno del servidor" }, 500)
   })
 
-  const web = o.dirWeb ?? join(o.raiz, "web")
+  const web = o.dirWeb ?? join(o.raiz, "frontend", "legacy-web")
   app.use("/*", serveStatic({ root: relative(process.cwd(), web) || "." }))
   return app
 }

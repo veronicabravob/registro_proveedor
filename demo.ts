@@ -6,9 +6,9 @@
 import { rmSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { listarCasos } from "./src/tools/lib/rutas.ts"
-import * as proveedor from "./src/tools/proveedor.ts"
-import { leerResultado, type ToolContext } from "./src/tools/types.ts"
+import { listarCasos } from "./backend/src/tools/lib/rutas.ts"
+import * as proveedor from "./backend/src/tools/proveedor.ts"
+import { leerResultado, type ToolContext } from "./backend/src/tools/types.ts"
 
 const raiz = fileURLToPath(new URL(".", import.meta.url))
 const ctx: ToolContext = {

@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, it } from "node:test"
 import { fileURLToPath } from "node:url"
-import * as modulo from "../modulo/tools/proveedor.ts"
+import * as modulo from "../../modulo/tools/proveedor.ts"
 import { piezasDelModulo } from "../scripts/generar-modulo.ts"
 import * as app from "../src/tools/proveedor.ts"
 
-const raiz = fileURLToPath(new URL("..", import.meta.url))
+const raiz = fileURLToPath(new URL("../..", import.meta.url))
 
 describe("bonus · módulo reutilizable (PRD §9.4)", () => {
   it("las tres piezas están sincronizadas con las fuentes de la aplicación", () => {

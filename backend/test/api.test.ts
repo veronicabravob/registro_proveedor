@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { cpSync, mkdtempSync, rmSync } from "node:fs"
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { after, before, describe, it } from "node:test"
@@ -14,7 +14,7 @@ import { claveValida } from "../src/http/seguridad.ts"
 import type { AdaptadorLlm, Respuesta } from "../src/llm/adapter.ts"
 import { herramientas } from "../src/tools/index.ts"
 
-const raizRepo = fileURLToPath(new URL("..", import.meta.url))
+const raizRepo = fileURLToPath(new URL("../..", import.meta.url))
 let dir: string
 const uso = { entrada: 10, salida: 5, cacheLectura: 0, cacheEscritura: 0 }
 
@@ -55,7 +55,7 @@ function app(opciones: { llm?: AdaptadorLlm | null; env?: Record<string, string>
     almacen: new AlmacenSesiones(10, 60_000),
     ciclo,
     telemetria: { trazas: [], metricas: [], contenido: "metadata_only" },
-    dirWeb: join(raizRepo, "web"),
+    dirWeb: join(dir, "web"),
   })
 }
 
@@ -68,6 +68,8 @@ const post = (cuerpo: unknown, headers: Record<string, string> = {}) => ({
 before(() => {
   dir = mkdtempSync(join(tmpdir(), "reto01-api-"))
   cpSync(join(raizRepo, "fixtures"), join(dir, "fixtures"), { recursive: true })
+  mkdirSync(join(dir, "web"))
+  writeFileSync(join(dir, "web", "index.html"), "<!doctype html><title>Registro como Proveedor</title>")
 })
 after(() => rmSync(dir, { recursive: true, force: true }))
 

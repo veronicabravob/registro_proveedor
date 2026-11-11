@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const raiz = fileURLToPath(new URL("..", import.meta.url))
+const raiz = fileURLToPath(new URL("../..", import.meta.url))
 const leer = (ruta: string): string => readFileSync(join(raiz, ruta), "utf8").trim()
 const AVISO = "<!-- Generado por scripts/generar-modulo.ts. No editar a mano: edita la fuente y ejecuta `npm run modulo`. -->"
 
@@ -28,7 +28,7 @@ export function piezasDelModulo(): Record<string, string> {
       "",
       AVISO,
       "",
-      leer("agent/prompt.md"),
+      leer("backend/agent/prompt.md"),
       "",
     ].join("\n"),
     "modulo/skill/registro-proveedor/SKILL.md": [
@@ -39,15 +39,15 @@ export function piezasDelModulo(): Record<string, string> {
       "",
       AVISO,
       "",
-      leer("src/knowledge/registro-proveedor.md"),
+      leer("backend/src/knowledge/registro-proveedor.md"),
       "",
     ].join("\n"),
     "modulo/tools/proveedor.ts": [
       "// Generado por scripts/generar-modulo.ts. Bonus PRD §9.4.",
       "// Re-exporta las MISMAS herramientas de la aplicación: no hay copias que puedan divergir.",
       "// Cada export se registra en la plataforma de agentes como `proveedor_<export>`.",
-      'export * from "../../src/tools/proveedor.ts"',
-      'export type { Tool, ToolContext, ToolResult } from "../../src/tools/types.ts"',
+      'export * from "../../backend/src/tools/proveedor.ts"',
+      'export type { Tool, ToolContext, ToolResult } from "../../backend/src/tools/types.ts"',
       "",
     ].join("\n"),
   }

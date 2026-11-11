@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { z } from "zod"
 
 /**
@@ -86,7 +87,10 @@ export interface Configuracion {
 
 /** Carga `.env` si existe (Node ≥ 21.7). En producción las variables las inyecta la plataforma. */
 function cargarArchivoEnv(): void {
-  if (existsSync(".env")) process.loadEnvFile(".env")
+  // Busca primero en el directorio actual y luego en la raíz del repositorio (monorepo).
+  const candidatos = [".env", fileURLToPath(new URL("../../.env", import.meta.url))]
+  const archivo = candidatos.find((c) => existsSync(c))
+  if (archivo) process.loadEnvFile(archivo)
 }
 
 export function cargarConfiguracion(env: NodeJS.ProcessEnv = process.env, leerArchivo = true): Configuracion {

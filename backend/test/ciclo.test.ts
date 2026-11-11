@@ -81,7 +81,7 @@ const procesarCaso = (caso: string): Paso[] => [
 
 before(() => {
   dir = mkdtempSync(join(tmpdir(), "reto01-ciclo-"))
-  cpSync(fileURLToPath(new URL("../fixtures", import.meta.url)), join(dir, "fixtures"), { recursive: true })
+  cpSync(fileURLToPath(new URL("../../fixtures", import.meta.url)), join(dir, "fixtures"), { recursive: true })
 })
 after(() => rmSync(dir, { recursive: true, force: true }))
 

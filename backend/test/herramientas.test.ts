@@ -9,7 +9,7 @@ import * as proveedor from "../src/tools/proveedor.ts"
 import { leerResultado, type ToolContext } from "../src/tools/types.ts"
 
 // Cada prueba corre sobre una copia de los fixtures en un directorio temporal: nunca toca el repo.
-const raizRepo = fileURLToPath(new URL("..", import.meta.url))
+const raizRepo = fileURLToPath(new URL("../..", import.meta.url))
 let ctx: ToolContext
 
 const FECHA = "2026-09-15" // fecha fija: vigencias deterministas
