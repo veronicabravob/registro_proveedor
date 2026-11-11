@@ -14,6 +14,7 @@ export function crearAdaptador(config: Configuracion): AdaptadorLlm | null {
         esfuerzo: config.llm.esfuerzo,
         timeoutMs: config.llm.timeoutMs,
         fallbacks: config.llm.fallbacks,
+        contenidoTrazas: config.telemetria.contenido,
       })
   }
 }

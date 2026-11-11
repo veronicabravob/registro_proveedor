@@ -14,6 +14,8 @@ export interface OpcionesAnthropic {
   timeoutMs: number
   /** Fallback del servidor ante rechazos de los clasificadores de seguridad (modelos 5.x). */
   fallbacks: boolean
+  /** Si los spans del SDK incluyen prompts y respuestas (`content`) o solo metadatos. */
+  contenidoTrazas: "metadata_only" | "content"
 }
 
 const PROVEEDOR = "anthropic"
@@ -32,7 +34,12 @@ export class AdaptadorAnthropic implements AdaptadorLlm {
 
   constructor(private readonly opciones: OpcionesAnthropic) {
     this.modelo = opciones.modelo
-    this.cliente = new Anthropic({ apiKey: opciones.apiKey, timeout: opciones.timeoutMs, maxRetries: 2 })
+    this.cliente = new Anthropic({
+      apiKey: opciones.apiKey,
+      timeout: opciones.timeoutMs,
+      maxRetries: 2,
+      openTelemetry: { traces: { contentMode: opciones.contenidoTrazas } },
+    })
   }
 
   async enviar(p: PeticionLlm): Promise<Respuesta> {
