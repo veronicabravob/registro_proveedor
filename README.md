@@ -13,9 +13,9 @@ Reto técnico 01 · Periferia IT Group. Especificación en [`docs/PRD.md`](docs/
 
 ## Link de prueba
 
-|                     |                                                                                          |
-| ------------------- | ---------------------------------------------------------------------------------------- |
-| **URL**             | https://registro-proveedor-fl6d.onrender.com                                             |
+|                     |                                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| **URL**             | https://registro-proveedor-fl6d.onrender.com                                                   |
 | **Clave de acceso** | `periferia-b29710f79af9` (el front la pide la primera vez; para la API, header `x-access-key`) |
 
 > La clave se publica porque el PRD (§6.1, §9.2) lo pide. Solo protege el costo del modelo: los
