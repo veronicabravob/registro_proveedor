@@ -58,13 +58,13 @@ FECHA_EJECUCION=2026-09-03 npm run demo    # con la fecha del PRD
 `demo.ts` (PRD §6.6) ejecuta los mismos pasos del agente llamando directamente a las herramientas,
 **sin modelo de lenguaje ni ninguna clave**. Corre en la terminal y en el CI, no en la interfaz:
 
-| Qué demuestra            | Cómo                                                                                                                  |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Flujo completo por caso  | Para los 4 casos de `fixtures/reto-01/casos/`: leer solicitud → mapear campos → generar formulario → armar paquete      |
-| Lo que falta, explícito  | Imprime faltantes, campos que requieren confirmación y bloqueos de firma de cada caso                                 |
-| Robustez (HU-5)          | Un caso inexistente y una ruta no permitida (`../etc`) devuelven `{ ok: false, error }` claro, sin excepción           |
-| Confirmación humana (RN4)| El envío sin aprobación del host se rechaza; con aprobación escribe solo `out/<caso>/ENVIO-SIMULADO.md`               |
-| Determinismo             | Borra `out/` al inicio y fija la fecha con `FECHA_EJECUCION`: con la misma fecha, el mismo resultado (salvo timestamps) |
+| Qué demuestra             | Cómo                                                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Flujo completo por caso   | Para los 4 casos de `fixtures/reto-01/casos/`: leer solicitud → mapear campos → generar formulario → armar paquete      |
+| Lo que falta, explícito   | Imprime faltantes, campos que requieren confirmación y bloqueos de firma de cada caso                                   |
+| Robustez (HU-5)           | Un caso inexistente y una ruta no permitida (`../etc`) devuelven `{ ok: false, error }` claro, sin excepción            |
+| Confirmación humana (RN4) | El envío sin aprobación del host se rechaza; con aprobación escribe solo `out/<caso>/ENVIO-SIMULADO.md`                 |
+| Determinismo              | Borra `out/` al inicio y fija la fecha con `FECHA_EJECUCION`: con la misma fecha, el mismo resultado (salvo timestamps) |
 
 Termina con una tabla por caso: formato, si quedó listo para firma y número de faltantes.
 
