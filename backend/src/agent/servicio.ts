@@ -23,6 +23,7 @@ export async function conversar(
     const entrada: EntradaTurno = {
       texto: peticion.texto,
       ...(peticion.confirmar === undefined ? {} : { confirmar: peticion.confirmar }),
+      ...(peticion.alProgreso ? { alProgreso: peticion.alProgreso } : {}),
     }
     const resultado = await ejecutarTurno(deps, sesion, entrada)
     registrarRespuesta(sesion, resultado)

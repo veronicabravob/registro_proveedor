@@ -22,7 +22,15 @@ export interface EntradaTurno {
   texto: string
   /** Respuesta de los botones del front ante una confirmación pendiente. Tiene prioridad sobre el texto. */
   confirmar?: boolean
+  /** Avance en vivo del turno (para streaming al front). Opcional: el ciclo no depende de él. */
+  alProgreso?: (e: Progreso) => void
 }
+
+/** Eventos de avance de un turno, en el orden en que ocurren. */
+export type Progreso =
+  | { tipo: "pensando"; iteracion: number }
+  | { tipo: "paso_inicio"; id: string; nombre: string }
+  | { tipo: "paso_fin"; llamada: LlamadaVisible }
 
 export interface ResultadoTurno {
   reply: string
@@ -36,6 +44,7 @@ export interface ResultadoTurno {
 
 /** Estado mutable de un turno: se descarta al terminar. */
 interface Turno {
+  progreso: (e: Progreso) => void
   sesion: Sesion
   confirmaciones: Set<string>
   llamadas: LlamadaVisible[]
@@ -60,7 +69,14 @@ export async function ejecutarTurno(deps: DependenciasCiclo, sesion: Sesion, ent
   const inicio = Date.now()
   return deps.observador.envolver("turno", { sesionId: sesion.id, nombre: "agente.turno" }, async (tramo) => {
     tramo.entrada(entrada.texto)
-    const turno: Turno = { sesion, confirmaciones: new Set(), llamadas: [], iteraciones: 0, needsConfirmation: false }
+    const turno: Turno = {
+      progreso: entrada.alProgreso ?? (() => {}),
+      sesion,
+      confirmaciones: new Set(),
+      llamadas: [],
+      iteraciones: 0,
+      needsConfirmation: false,
+    }
     const nota = resolverConfirmacion(deps, turno, entrada)
     sesion.mensajes.push({ rol: "usuario", partes: [{ tipo: "texto", texto: entrada.texto }, ...(nota ? [nota] : [])] })
 
@@ -108,6 +124,7 @@ async function iterar(deps: DependenciasCiclo, turno: Turno): Promise<{ reply: s
       return { reply: mensajeTope(turno, "tokens", deps.limites.tokensSesion), resultado: "tope_tokens" }
     }
     turno.iteraciones++
+    turno.progreso({ tipo: "pensando", iteracion: turno.iteraciones })
     const respuesta = await llamarModelo(deps, turno, herramientas)
     if (!respuesta) return { reply: turno.error?.mensaje ?? "Error al consultar el modelo.", resultado: "error" }
 
@@ -182,6 +199,7 @@ async function ejecutarLlamada(
 ): Promise<Parte> {
   return deps.observador.envolver("herramienta", { sesionId: turno.sesion.id, nombre: llamada.nombre }, async (tramo) => {
     const inicio = Date.now()
+    turno.progreso({ tipo: "paso_inicio", id: llamada.id, nombre: llamada.nombre })
     tramo.entrada(llamada.args)
     const salida = await invocar(deps, turno, llamada)
     const r = leerResultado(salida)
@@ -230,6 +248,7 @@ async function invocar(deps: DependenciasCiclo, turno: Turno, llamada: Extract<P
 
 function registrarLlamada(deps: DependenciasCiclo, turno: Turno, l: LlamadaVisible): void {
   turno.llamadas.push(l)
+  turno.progreso({ tipo: "paso_fin", llamada: l })
   deps.bitacora.registrar({
     sessionId: turno.sesion.id,
     herramienta: l.nombre,

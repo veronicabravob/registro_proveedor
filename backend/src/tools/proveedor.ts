@@ -28,6 +28,10 @@ interface ResultadoFormulario {
   aviso?: string
 }
 
+const NOMBRE_FORMATO: Record<Formato, string> = { xlsx: "Plantilla de Excel", pdf: "Formulario PDF", portal: "Portal web" }
+
+const cantidad = (n: number, uno: string, varios: string): string => `${n} ${n === 1 ? uno : varios}`
+
 const fechaDe = (ctx: ToolContext): string => ctx.fechaEjecucion ?? hoyISO()
 
 function prepararSalida(ctx: ToolContext, caso: string): string {
@@ -88,7 +92,7 @@ export const leer_solicitud = definirHerramienta("proveedor_leer_solicitud", {
           adjuntos: solicitud.adjuntos,
         },
       },
-      resumen: `${solicitud.cliente} (${solicitud.pais}) · formato ${solicitud.formato} · ${plantilla.campos.length} campos · ${soportesExigidos.length} soportes`,
+      resumen: `${NOMBRE_FORMATO[solicitud.formato]} con ${plantilla.campos.length} campos y ${soportesExigidos.length} soportes exigidos.`,
     }
   },
 })
@@ -122,7 +126,7 @@ export const mapear_campos = definirHerramienta("proveedor_mapear_campos", {
     const { llenos, faltantes, requiere_confirmacion } = mapeo
     return {
       data: mapeo,
-      resumen: `${llenos.length} llenos · ${faltantes.length} faltantes · ${requiere_confirmacion.length} requieren confirmación`,
+      resumen: `${llenos.length} llenos, ${requiere_confirmacion.length} por confirmar, ${faltantes.length} sin dato.`,
     }
   },
 })
@@ -158,7 +162,7 @@ export const generar_formulario = definirHerramienta("proveedor_generar_formular
       const n = await generarXlsx(plantilla.celdas, mapeo, destino)
       return {
         data: { ruta, formato: "xlsx", soportado: true, campos_escritos: n },
-        resumen: `Excel generado: ${ruta} (${n} celdas)`,
+        resumen: `En el mismo formato del cliente (Excel): ${ruta}`,
       }
     }
     if (solicitud.formato === "pdf") {
@@ -166,7 +170,7 @@ export const generar_formulario = definirHerramienta("proveedor_generar_formular
       const n = await generarPdf(plantilla.campos, mapeo, enc, destino)
       return {
         data: { ruta, formato: "pdf", soportado: true, campos_escritos: n },
-        resumen: `PDF generado: ${ruta} (${n} campos)`,
+        resumen: `En el mismo formato del cliente (PDF): ${ruta}`,
       }
     }
     const n = await generarValoresPortal(campos, mapeo, enc, destino)
@@ -178,7 +182,7 @@ export const generar_formulario = definirHerramienta("proveedor_generar_formular
         aviso: "formato no soportado: el portal web no se llena automáticamente; se generaron los valores listos para copiar",
         campos_escritos: n,
       },
-      resumen: `Formato no soportado (portal); valores para copiar en ${ruta}`,
+      resumen: `Este cliente usa un portal web: dejé los valores listos para copiar en ${ruta}`,
     }
   },
 })
@@ -259,7 +263,9 @@ export const armar_paquete = definirHerramienta("proveedor_armar_paquete", {
           ...soportes.flatMap((s) => (s.archivo && s.estado !== "ausente" ? [s.archivo] : [])),
         ],
       },
-      resumen: `${listo_para_firma ? "LISTO" : "NO listo"} para firma · soportes: ${conteo("presente")} presentes, ${conteo("vencido")} vencidos, ${conteo("ausente")} ausentes`,
+      resumen: listo_para_firma
+        ? `Listo para firma: los ${conteo("presente")} soportes están vigentes.`
+        : `No está listo para firma: ${[conteo("vencido") ? `${cantidad(conteo("vencido"), "soporte vencido", "soportes vencidos")}` : "", conteo("ausente") ? `${cantidad(conteo("ausente"), "soporte ausente", "soportes ausentes")}` : "", formulario ? "" : "falta el formulario"].filter(Boolean).join(", ")}.`,
     }
   },
 })
@@ -278,7 +284,7 @@ export const solicitar_confirmacion = definirHerramienta("proveedor_solicitar_co
     leerCaso(ctx, caso)
     return {
       data: { pendiente: true, accion, caso, detalle: resumen },
-      resumen: `Confirmación solicitada: ${accion} · ${caso}`,
+      resumen: `Quedó pendiente tu confirmación para registrar el envío del caso ${caso}.`,
     }
   },
 })
@@ -322,7 +328,7 @@ export const simular_envio = definirHerramienta("proveedor_simular_envio", {
     )
     return {
       data: { ruta: rutaRelativa(ctx, destino), listo_para_firma: listo },
-      resumen: `Envío simulado registrado en ${rutaRelativa(ctx, destino)}`,
+      resumen: `Registré el envío simulado con tu confirmación: ${rutaRelativa(ctx, destino)}`,
     }
   },
 })

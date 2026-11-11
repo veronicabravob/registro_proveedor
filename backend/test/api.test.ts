@@ -183,3 +183,21 @@ describe("configuración", () => {
     assert.throws(() => cargarConfiguracion({ LLM_EFFORT: "turbo" }, false), /Configuración inválida: LLM_EFFORT/)
   })
 })
+
+describe("streaming", () => {
+  it("POST /api/chat/stream emite el avance por paso y la respuesta final (SSE)", async () => {
+    const a = app({ llm: llmQue([llamada("proveedor_leer_solicitud", { caso: "co-industrias-delta" }), texto("Listo.")]) })
+    const r = await a.request("/api/chat/stream", post({ message: "procesa" }))
+    assert.equal(r.status, 200)
+    assert.match(r.headers.get("content-type") ?? "", /text\/event-stream/)
+    const cuerpo = await r.text()
+    const eventos = [...cuerpo.matchAll(/^event: (\w+)/gm)].map((m) => m[1])
+    assert.deepEqual(eventos, ["pensando", "paso_inicio", "paso_fin", "pensando", "respuesta"])
+    assert.match(cuerpo, /"reply":"Listo."/)
+  })
+
+  it("valida el cuerpo y responde 503 sin modelo, igual que /api/chat", async () => {
+    assert.equal((await app().request("/api/chat/stream", post({}))).status, 400)
+    assert.equal((await app({ llm: null }).request("/api/chat/stream", post({ message: "x" }))).status, 503)
+  })
+})

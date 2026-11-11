@@ -1,13 +1,14 @@
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { extname, join, relative, resolve, sep } from "node:path"
 import { serveStatic } from "@hono/node-server/serve-static"
-import { Hono } from "hono"
+import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { secureHeaders } from "hono/secure-headers"
+import { streamSSE } from "hono/streaming"
 import { z } from "zod"
-import type { DependenciasCiclo } from "../agent/ciclo.ts"
+import type { DependenciasCiclo, Progreso, ResultadoTurno } from "../agent/ciclo.ts"
 import { conversar } from "../agent/servicio.ts"
-import { type AlmacenSesiones, SESION_ID_RE } from "../agent/sesiones.ts"
+import { type AlmacenSesiones, SESION_ID_RE, type Sesion } from "../agent/sesiones.ts"
 import type { Configuracion } from "../config.ts"
 import type { EstadoTelemetria } from "../telemetry/index.ts"
 import { leerCaso } from "../tools/lib/datos.ts"
@@ -93,32 +94,59 @@ export function crearApp(o: OpcionesApp): Hono {
     confirm: z.boolean().optional(),
   })
 
-  app.post("/api/chat", limitarSolicitudes(config.limites.solicitudesPorMinuto), async (c) => {
+  type Cuerpo = z.infer<typeof CuerpoChat>
+  const leerCuerpo = async (c: Context): Promise<{ ok: true; data: Cuerpo } | { ok: false; error: string }> => {
     const cuerpo = CuerpoChat.safeParse(await c.req.json().catch(() => null))
-    if (!cuerpo.success) {
-      return c.json(
-        { error: `Solicitud inválida: ${cuerpo.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}` },
-        400,
-      )
+    if (cuerpo.success) return { ok: true, data: cuerpo.data }
+    return {
+      ok: false,
+      error: `Solicitud inválida: ${cuerpo.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
     }
-    if (!o.ciclo) return c.json({ error: "El modelo de lenguaje no está configurado en el servidor (falta la clave)." }, 503)
+  }
+  const respuesta = (sesion: Sesion, r: ResultadoTurno) => ({
+    sessionId: sesion.id,
+    reply: r.reply,
+    toolCalls: r.toolCalls,
+    needsConfirmation: r.needsConfirmation,
+    pendingAction: r.pendiente,
+    error: r.error ?? null,
+    iterations: r.iteraciones,
+    usage: { ...r.uso, sessionLimit: config.limites.tokensPorSesion },
+  })
+  const SIN_MODELO = "El modelo de lenguaje no está configurado en el servidor (falta la clave)."
+  const OCUPADA = "La sesión está procesando otro mensaje. Espera la respuesta."
 
-    const r = await conversar(o.ciclo, o.almacen, {
-      sessionId: cuerpo.data.sessionId,
-      texto: cuerpo.data.message,
-      ...(cuerpo.data.confirm === undefined ? {} : { confirmar: cuerpo.data.confirm }),
-    })
-    if (r.tipo === "ocupada") return c.json({ error: "La sesión está procesando otro mensaje. Espera la respuesta." }, 409)
-    const { resultado, sesion } = r
-    return c.json({
-      sessionId: sesion.id,
-      reply: resultado.reply,
-      toolCalls: resultado.toolCalls,
-      needsConfirmation: resultado.needsConfirmation,
-      pendingAction: resultado.pendiente,
-      error: resultado.error ?? null,
-      iterations: resultado.iteraciones,
-      usage: { ...resultado.uso, sessionLimit: config.limites.tokensPorSesion },
+  const turnoDesde = (data: Cuerpo, alProgreso?: (e: Progreso) => void) => ({
+    sessionId: data.sessionId,
+    texto: data.message,
+    ...(data.confirm === undefined ? {} : { confirmar: data.confirm }),
+    ...(alProgreso ? { alProgreso } : {}),
+  })
+
+  app.post("/api/chat", limitarSolicitudes(config.limites.solicitudesPorMinuto), async (c) => {
+    const cuerpo = await leerCuerpo(c)
+    if (!cuerpo.ok) return c.json({ error: cuerpo.error }, 400)
+    if (!o.ciclo) return c.json({ error: SIN_MODELO }, 503)
+    const r = await conversar(o.ciclo, o.almacen, turnoDesde(cuerpo.data))
+    if (r.tipo === "ocupada") return c.json({ error: OCUPADA }, 409)
+    return c.json(respuesta(r.sesion, r.resultado))
+  })
+
+  /** Igual que /api/chat, pero emite el avance en vivo como Server-Sent Events: paso_inicio, paso_fin, respuesta. */
+  app.post("/api/chat/stream", limitarSolicitudes(config.limites.solicitudesPorMinuto), async (c) => {
+    const cuerpo = await leerCuerpo(c)
+    if (!cuerpo.ok) return c.json({ error: cuerpo.error }, 400)
+    const ciclo = o.ciclo
+    if (!ciclo) return c.json({ error: SIN_MODELO }, 503)
+    return streamSSE(c, async (stream) => {
+      const enviar = (event: string, data: unknown) => void stream.writeSSE({ event, data: JSON.stringify(data) })
+      const r = await conversar(
+        ciclo,
+        o.almacen,
+        turnoDesde(cuerpo.data, (e) => enviar(e.tipo, e)),
+      )
+      if (r.tipo === "ocupada") await stream.writeSSE({ event: "error", data: JSON.stringify({ error: OCUPADA }) })
+      else await stream.writeSSE({ event: "respuesta", data: JSON.stringify(respuesta(r.sesion, r.resultado)) })
     })
   })
 
@@ -161,7 +189,7 @@ export function crearApp(o: OpcionesApp): Hono {
     return c.json({ error: "Error interno del servidor" }, 500)
   })
 
-  const web = o.dirWeb ?? join(o.raiz, "frontend", "legacy-web")
+  const web = o.dirWeb ?? join(o.raiz, "frontend", "dist")
   app.use("/*", serveStatic({ root: relative(process.cwd(), web) || "." }))
   return app
 }
