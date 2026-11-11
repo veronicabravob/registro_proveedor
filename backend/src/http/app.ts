@@ -70,6 +70,8 @@ export function crearApp(o: OpcionesApp): Hono {
       llmConfigured: o.ciclo !== null,
       version: config.version,
       accessKeyRequired: Boolean(config.claveAcceso),
+      // Solo agregados globales (sin datos de sesiones ni claves): permite ver si el tope diario se acerca.
+      dailyTokens: { used: o.ciclo?.presupuesto?.consumidos ?? 0, limit: config.limites.tokensPorDia },
       telemetry: o.telemetria,
     }),
   )
@@ -123,7 +125,10 @@ export function crearApp(o: OpcionesApp): Hono {
     ...(alProgreso ? { alProgreso } : {}),
   })
 
-  app.post("/api/chat", limitarSolicitudes(config.limites.solicitudesPorMinuto), async (c) => {
+  // Un solo limitador para ambas rutas de chat: alternar entre ellas no duplica el cupo.
+  const limitador = limitarSolicitudes(config.limites.solicitudesPorMinuto, config.limites.proxiesConfianza)
+
+  app.post("/api/chat", limitador, async (c) => {
     const cuerpo = await leerCuerpo(c)
     if (!cuerpo.ok) return c.json({ error: cuerpo.error }, 400)
     if (!o.ciclo) return c.json({ error: SIN_MODELO }, 503)
@@ -133,7 +138,7 @@ export function crearApp(o: OpcionesApp): Hono {
   })
 
   /** Igual que /api/chat, pero emite el avance en vivo como Server-Sent Events: paso_inicio, paso_fin, respuesta. */
-  app.post("/api/chat/stream", limitarSolicitudes(config.limites.solicitudesPorMinuto), async (c) => {
+  app.post("/api/chat/stream", limitador, async (c) => {
     const cuerpo = await leerCuerpo(c)
     if (!cuerpo.ok) return c.json({ error: cuerpo.error }, 400)
     const ciclo = o.ciclo

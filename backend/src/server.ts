@@ -8,7 +8,7 @@ import { serve } from "@hono/node-server"
 import { BitacoraGlobal } from "./agent/bitacora.ts"
 import type { DependenciasCiclo } from "./agent/ciclo.ts"
 import { cargarSistema } from "./agent/prompt.ts"
-import { AlmacenSesiones } from "./agent/sesiones.ts"
+import { AlmacenSesiones, PresupuestoDiario } from "./agent/sesiones.ts"
 import { cargarConfiguracion } from "./config.ts"
 import { crearApp } from "./http/app.ts"
 import { crearAdaptador } from "./llm/index.ts"
@@ -37,6 +37,7 @@ const ciclo: DependenciasCiclo | null = llm
       sistema: cargarSistema(dirBackend),
       directorio: raiz,
       limites: { iteraciones: config.limites.iteracionesPorTurno, tokensSesion: config.limites.tokensPorSesion },
+      presupuesto: new PresupuestoDiario(config.limites.tokensPorDia),
       ...(config.fechaEjecucion ? { fechaEjecucion: config.fechaEjecucion } : {}),
       observador: telemetria.observador,
       bitacora: new BitacoraGlobal(join(raiz, "out")),

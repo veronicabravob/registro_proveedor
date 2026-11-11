@@ -5,7 +5,7 @@ import { leerResultado, type Tool, type ToolContext } from "../tools/types.ts"
 import type { BitacoraGlobal } from "./bitacora.ts"
 import { esConfirmacionExplicita } from "./confirmacion.ts"
 import type { Observador } from "./observador.ts"
-import type { AccionPendiente, LlamadaVisible, Sesion } from "./sesiones.ts"
+import type { AccionPendiente, LlamadaVisible, PresupuestoDiario, Sesion } from "./sesiones.ts"
 
 export interface DependenciasCiclo {
   llm: AdaptadorLlm
@@ -13,6 +13,8 @@ export interface DependenciasCiclo {
   sistema: string
   directorio: string
   limites: { iteraciones: number; tokensSesion: number }
+  /** Tope global diario de tokens compartido por todas las sesiones (PRD §8). Opcional en pruebas. */
+  presupuesto?: PresupuestoDiario
   fechaEjecucion?: string
   observador: Observador
   bitacora: BitacoraGlobal
@@ -123,6 +125,9 @@ async function iterar(deps: DependenciasCiclo, turno: Turno): Promise<{ reply: s
     if (turno.sesion.uso.entrada + turno.sesion.uso.salida >= deps.limites.tokensSesion) {
       return { reply: mensajeTope(turno, "tokens", deps.limites.tokensSesion), resultado: "tope_tokens" }
     }
+    if (deps.presupuesto?.agotado()) {
+      return { reply: mensajeTope(turno, "diario", deps.presupuesto.limite), resultado: "tope_tokens" }
+    }
     turno.iteraciones++
     turno.progreso({ tipo: "pensando", iteracion: turno.iteraciones })
     const respuesta = await llamarModelo(deps, turno, herramientas)
@@ -166,6 +171,7 @@ async function llamarModelo(
       sesionId: turno.sesion.id,
     })
     turno.sesion.uso = sumarUso(turno.sesion.uso, r.uso)
+    deps.presupuesto?.registrar(r.uso.entrada + r.uso.salida)
     deps.observador.evento({ tipo: "llm", modelo: r.modelo, uso: r.uso, duracionMs: Date.now() - inicio, ok: true })
     return r
   } catch (e) {
@@ -281,12 +287,17 @@ function efectosDeResultado(deps: DependenciasCiclo, turno: Turno, nombre: strin
 }
 
 /** CA1: al llegar a un tope, responde con lo que tiene y lo que falta (sin otra llamada al modelo). */
-function mensajeTope(turno: Turno, tope: "iteraciones" | "tokens", limite: number): string {
+const MOTIVOS_TOPE: Record<"iteraciones" | "tokens" | "diario", (limite: string) => string> = {
+  iteraciones: (l) => `Alcancé el tope de ${l} pasos para este turno.`,
+  tokens: (l) => `Esta sesión alcanzó su tope de ${l} tokens. Inicia una sesión nueva para continuar.`,
+  diario: (l) =>
+    `El servicio alcanzó su tope diario de uso del modelo (${l} tokens entre todas las sesiones). ` +
+    "Intenta de nuevo mañana: el contador se reinicia a las 00:00 UTC. Tu sesión sigue activa.",
+}
+
+function mensajeTope(turno: Turno, tope: "iteraciones" | "tokens" | "diario", limite: number): string {
   const hechas = turno.llamadas.map((l) => `- ${l.ok ? "✔" : "✘"} ${l.nombre}: ${l.resumen}`)
-  const motivo =
-    tope === "iteraciones"
-      ? `Alcancé el tope de ${limite} pasos para este turno.`
-      : `Esta sesión alcanzó su tope de ${limite.toLocaleString("es-CO")} tokens. Inicia una sesión nueva para continuar.`
+  const motivo = MOTIVOS_TOPE[tope](tope === "iteraciones" ? String(limite) : limite.toLocaleString("es-CO"))
   return [
     `**${motivo}**`,
     "",

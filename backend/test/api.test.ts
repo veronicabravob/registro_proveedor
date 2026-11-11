@@ -79,6 +79,7 @@ describe("API", () => {
     const cuerpo = await r.text()
     assert.equal(r.status, 200)
     assert.match(cuerpo, /"provider":"anthropic"/)
+    assert.match(cuerpo, /"dailyTokens":\{"used":0,"limit":3000000\}/)
     assert.doesNotMatch(cuerpo, /sk-ant-secreta/)
     assert.ok(r.headers.get("content-security-policy"))
   })
@@ -160,6 +161,15 @@ describe("API", () => {
     const a = app({ env: { RATE_LIMIT_PER_MINUTE: "1" }, llm: llmQue([texto("uno"), texto("dos")]) })
     assert.equal((await a.request("/api/chat", post({ message: "1" }))).status, 200)
     assert.equal((await a.request("/api/chat", post({ message: "2" }))).status, 429)
+  })
+
+  it("el límite por IP usa el último valor de x-forwarded-for (no falsificable por el cliente)", async () => {
+    const a = app({ env: { RATE_LIMIT_PER_MINUTE: "1" }, llm: llmQue([texto("uno"), texto("dos"), texto("tres")]) })
+    const desde = (xff: string) => a.request("/api/chat", post({ message: "x" }, { "x-forwarded-for": xff }))
+    assert.equal((await desde("1.1.1.1, 203.0.113.7")).status, 200)
+    // El cliente cambia el primer valor, pero el proxy agrega la misma IP real al final.
+    assert.equal((await desde("9.9.9.9, 203.0.113.7")).status, 429)
+    assert.equal((await desde("1.1.1.1, 203.0.113.8")).status, 200)
   })
 
   it("sirve el front estático y responde 404 JSON en rutas de API desconocidas", async () => {

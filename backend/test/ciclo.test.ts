@@ -9,7 +9,7 @@ import { type DependenciasCiclo, ejecutarTurno } from "../src/agent/ciclo.ts"
 import { esConfirmacionExplicita } from "../src/agent/confirmacion.ts"
 import { type EventoAgente, observadorNulo } from "../src/agent/observador.ts"
 import { cargarSistema } from "../src/agent/prompt.ts"
-import { AlmacenSesiones, type Sesion } from "../src/agent/sesiones.ts"
+import { AlmacenSesiones, PresupuestoDiario, type Sesion } from "../src/agent/sesiones.ts"
 import { type AdaptadorLlm, ErrorLlm, type Mensaje, type PeticionLlm, type Respuesta, usoVacio } from "../src/llm/adapter.ts"
 import { herramientas } from "../src/tools/index.ts"
 
@@ -156,6 +156,40 @@ describe("ciclo del agente", () => {
     assert.equal(r.toolCalls[0]?.ok, false)
     assert.equal(s.pendiente, null)
   })
+
+  it("una afirmación sin confirmación pendiente no autoriza el envío", async () => {
+    const s = sesiones.crear()
+    const llm = new LlmGuionado([
+      llamar("proveedor_simular_envio", () => ({ caso: "ec-corp-andina", confirmado: true })),
+      responder("Primero debo pedir confirmación."),
+    ])
+    const r = await ejecutarTurno(deps(llm), s, { texto: "envía" })
+    assert.equal(r.toolCalls[0]?.resumen, "requiere confirmación explícita")
+    assert.equal(existsSync(join(dir, "out/ec-corp-andina/ENVIO-SIMULADO.md")), false)
+  })
+
+  it("la confirmación solo vale para el turno inmediatamente siguiente", async () => {
+    const s = sesiones.crear()
+    s.pendiente = { accion: "simular_envio", caso: "ec-corp-andina", detalle: "" }
+    await ejecutarTurno(deps(new LlmGuionado([responder("¿Qué deseas revisar?")])), s, { texto: "¿qué falta?" })
+    const llm = new LlmGuionado([
+      llamar("proveedor_simular_envio", () => ({ caso: "ec-corp-andina", confirmado: true })),
+      responder("No puedo enviar sin confirmación."),
+    ])
+    const r = await ejecutarTurno(deps(llm), s, { texto: "Sí, confirmo el envío." })
+    assert.equal(r.toolCalls[0]?.resumen, "requiere confirmación explícita")
+  })
+
+  it("el flag confirm del front tiene prioridad sobre el texto", async () => {
+    const s = sesiones.crear()
+    s.pendiente = { accion: "simular_envio", caso: "ec-corp-andina", detalle: "" }
+    const llm = new LlmGuionado([
+      llamar("proveedor_simular_envio", () => ({ caso: "ec-corp-andina", confirmado: true })),
+      responder("No envío."),
+    ])
+    const r = await ejecutarTurno(deps(llm), s, { texto: "sí", confirmar: false })
+    assert.equal(r.toolCalls[0]?.ok, false)
+  })
 })
 
 describe("topes y errores", () => {
@@ -175,6 +209,21 @@ describe("topes y errores", () => {
     const r = await ejecutarTurno(deps(llm, { iteraciones: 5, tokensSesion: 1000 }), s, { texto: "hola" })
     assert.match(r.reply, /tope de/)
     assert.equal(llm.peticiones.length, 0)
+  })
+
+  it("tope global diario: no llama al modelo, responde claro y la sesión sigue viva", async () => {
+    const s = sesiones.crear()
+    const presupuesto = new PresupuestoDiario(10_000)
+    presupuesto.registrar(10_000)
+    const llm = new LlmGuionado([])
+    const r = await ejecutarTurno({ ...deps(llm), presupuesto }, s, { texto: "hola" })
+    assert.match(r.reply, /tope diario/)
+    assert.equal(r.error, undefined)
+    assert.equal(llm.peticiones.length, 0)
+    const libre = new PresupuestoDiario(1_000_000)
+    const r2 = await ejecutarTurno({ ...deps(new LlmGuionado([responder("Hola")])), presupuesto: libre }, s, { texto: "hola" })
+    assert.equal(r2.reply, "Hola")
+    assert.equal(libre.consumidos, 120)
   })
 
   it("CA5: un error del proveedor se muestra claro y la sesión sigue viva", async () => {
