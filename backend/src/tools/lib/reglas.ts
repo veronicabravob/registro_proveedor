@@ -18,6 +18,7 @@ const ReglasSchema = z.object({
   campos_bancarios: z.array(z.string()),
   campos_sensibles: z.array(z.string()),
   soportes: z.record(z.string(), z.string()),
+  nombres_pais: z.record(z.string(), z.string()),
 })
 export type Reglas = z.infer<typeof ReglasSchema>
 
