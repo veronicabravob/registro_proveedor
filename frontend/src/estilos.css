@@ -65,10 +65,13 @@ summary:focus-visible {
   clip: rect(0 0 0 0);
 }
 
+/* La app ocupa exactamente la ventana: el encabezado y el lateral quedan fijos y solo
+   se desplaza el área del chat (antes se desplazaba toda la página, lateral incluido). */
 .app {
-  min-height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* Encabezado */
@@ -109,7 +112,6 @@ summary:focus-visible {
 .cuerpo {
   flex: 1;
   display: flex;
-  flex-wrap: wrap;
   min-height: 0;
 }
 
@@ -123,6 +125,7 @@ summary:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow-y: auto;
 }
 .lateral h2 {
   margin: 0 0 10px 12px;
@@ -184,10 +187,11 @@ summary:focus-visible {
 
 /* Principal */
 .principal {
-  flex: 999 1 560px;
+  flex: 1 1 560px;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 .lienzo {
   flex: 1;
@@ -689,7 +693,21 @@ button:disabled {
 
 /* Móvil */
 @media (max-width: 760px) {
+  /* En el celular el lateral pasa arriba y se vuelve a desplazar toda la página. */
+  .app {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .cuerpo {
+    flex-direction: column;
+  }
+  .principal {
+    overflow: visible;
+  }
   .lateral {
+    flex: none;
+    max-height: 34vh;
     max-width: none;
     border-right: 0;
     border-bottom: 1px solid var(--borde);

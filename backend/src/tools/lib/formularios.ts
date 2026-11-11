@@ -1,6 +1,5 @@
 import { writeFile } from "node:fs/promises"
 import ExcelJS from "exceljs"
-import { PDFDocument, type PDFFont, type PDFPage, rgb, StandardFonts } from "pdf-lib"
 import type { CampoSolicitado, CeldaPlantilla, Solicitud } from "./datos.ts"
 import { type Mapeo, valorParaFormulario } from "./mapeo.ts"
 
@@ -8,6 +7,8 @@ export interface Encabezado {
   caso: string
   solicitud: Solicitud
   fechaEjecucion: string
+  /** Representante legal que firma (del maestro); se muestra en el bloque de firma del PDF. */
+  firmante?: { nombre: string; cargo: string }
 }
 
 const MARCA = { requiere_confirmacion: "[REQUIERE CONFIRMACIÓN]", faltante: "[FALTANTE]" } as const
@@ -46,123 +47,9 @@ export async function generarXlsx(celdas: readonly CeldaPlantilla[], mapeo: Mape
   return celdas.length
 }
 
-// ── P1 · PDF ─────────────────────────────────────────────────────────────────────────────────
+// ── P1 · PDF: ver formulario-pdf.ts ─────────────────────────────────────────────────────────
 
-/** Las fuentes estándar de PDF usan WinAnsi: se sustituye lo que no se puede codificar. */
-function seguroWinAnsi(texto: string): string {
-  return texto
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201c\u201d]/g, '"')
-    .replace(/[\u2013\u2014]/g, "-")
-    .replace(/[^\x20-\x7e\xa0-\xff]/g, "?")
-}
-
-function partirEnLineas(texto: string, fuente: PDFFont, tamano: number, ancho: number): string[] {
-  const lineas: string[] = []
-  let actual = ""
-  for (const palabra of texto.split(/\s+/)) {
-    const prueba = actual ? `${actual} ${palabra}` : palabra
-    if (fuente.widthOfTextAtSize(prueba, tamano) <= ancho || !actual) actual = prueba
-    else {
-      lineas.push(actual)
-      actual = palabra
-    }
-  }
-  if (actual) lineas.push(actual)
-  return lineas.length ? lineas : [""]
-}
-
-class EscritorPdf {
-  private pagina: PDFPage
-  private y = 0
-  static readonly MARGEN = 56
-  static readonly ANCHO_A4: [number, number] = [595.28, 841.89]
-
-  constructor(
-    private readonly doc: PDFDocument,
-    private readonly normal: PDFFont,
-    private readonly negrita: PDFFont,
-  ) {
-    this.pagina = this.nuevaPagina()
-  }
-
-  private nuevaPagina(): PDFPage {
-    const p = this.doc.addPage(EscritorPdf.ANCHO_A4)
-    this.y = p.getHeight() - EscritorPdf.MARGEN
-    this.pagina = p
-    return p
-  }
-
-  private get ancho(): number {
-    return this.pagina.getWidth() - 2 * EscritorPdf.MARGEN
-  }
-
-  texto(
-    texto: string,
-    opciones: { tamano?: number; negrita?: boolean; color?: [number, number, number]; espacio?: number } = {},
-  ): void {
-    const tamano = opciones.tamano ?? 10
-    const fuente = opciones.negrita ? this.negrita : this.normal
-    const [r, g, b] = opciones.color ?? [0.1, 0.1, 0.12]
-    for (const linea of partirEnLineas(seguroWinAnsi(texto), fuente, tamano, this.ancho)) {
-      if (this.y < EscritorPdf.MARGEN + tamano) this.nuevaPagina()
-      this.y -= tamano * 1.35
-      this.pagina.drawText(linea, { x: EscritorPdf.MARGEN, y: this.y, size: tamano, font: fuente, color: rgb(r, g, b) })
-    }
-    this.y -= opciones.espacio ?? 0
-  }
-
-  separador(): void {
-    this.y -= 6
-    this.pagina.drawLine({
-      start: { x: EscritorPdf.MARGEN, y: this.y },
-      end: { x: this.pagina.getWidth() - EscritorPdf.MARGEN, y: this.y },
-      thickness: 0.5,
-      color: rgb(0.75, 0.75, 0.78),
-    })
-    this.y -= 8
-  }
-}
-
-/** PDF generado que reproduce todos los campos, con etiqueta y valor, en el orden de la plantilla (HU-3 P1). */
-export async function generarPdf(
-  campos: readonly CampoSolicitado[],
-  mapeo: Mapeo,
-  enc: Encabezado,
-  destino: string,
-): Promise<number> {
-  const doc = await PDFDocument.create()
-  doc.setTitle(`Formulario de registro de proveedor - ${enc.solicitud.cliente}`)
-  doc.setAuthor("Periferia IT Group S.A.S.")
-  doc.setCreator("Agente Registro como Proveedor")
-  doc.setProducer("pdf-lib")
-  doc.setCreationDate(new Date(`${enc.fechaEjecucion}T00:00:00Z`))
-  doc.setModificationDate(new Date(`${enc.fechaEjecucion}T00:00:00Z`))
-
-  const w = new EscritorPdf(doc, await doc.embedFont(StandardFonts.Helvetica), await doc.embedFont(StandardFonts.HelveticaBold))
-  w.texto("Formulario de registro de proveedor", { tamano: 16, negrita: true, espacio: 4 })
-  w.texto(`Cliente: ${enc.solicitud.cliente} (${enc.solicitud.pais})`, { tamano: 10 })
-  w.texto(`Referencia: ${enc.solicitud.asunto}`, { tamano: 10 })
-  w.texto(`Caso: ${enc.caso} · Generado: ${enc.fechaEjecucion}`, { tamano: 9, color: [0.4, 0.4, 0.45] })
-  w.separador()
-
-  campos.forEach((campo, i) => {
-    const v = valorParaFormulario(mapeo, campo.etiqueta)
-    const obligatorio = campo.obligatorio ? " *" : ""
-    w.texto(`${i + 1}. ${campo.etiqueta}${obligatorio}`, { tamano: 9, negrita: true, color: [0.3, 0.3, 0.35] })
-    if (v.estado === "faltante") w.texto(`${MARCA.faltante} ${v.nota}`, { tamano: 11, color: [0.7, 0.1, 0.1], espacio: 6 })
-    else if (v.estado === "requiere_confirmacion") {
-      w.texto(v.valor, { tamano: 11 })
-      w.texto(`${MARCA.requiere_confirmacion} ${v.nota ?? ""}`, { tamano: 8, color: [0.6, 0.4, 0], espacio: 6 })
-    } else w.texto(v.valor, { tamano: 11, espacio: 6 })
-  })
-
-  w.separador()
-  w.texto("* Campo obligatorio para el cliente.", { tamano: 8, color: [0.4, 0.4, 0.45] })
-  w.texto("Firma del representante legal: ______________________________", { tamano: 10, espacio: 4 })
-  await writeFile(destino, await doc.save())
-  return campos.length
-}
+export { generarPdf } from "./formulario-pdf.ts"
 
 // ── P2 · Portal web (no soportado: valores listos para copiar) ───────────────────────────────
 

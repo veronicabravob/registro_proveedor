@@ -234,3 +234,15 @@ export function valorParaFormulario(
   const f = mapeo.faltantes.find((c) => c.etiqueta === etiqueta)
   return { valor: "", estado: "faltante", nota: f?.motivo ?? "Campo no mapeado" }
 }
+
+/** Deja visibles solo los 4 últimos caracteres de los campos sensibles (cuenta, SWIFT, cédula). */
+export function ocultarSensibles(m: Mapeo): Mapeo {
+  const ocultar = (v: string): string => `••••${v.slice(-4)}`
+  return {
+    ...m,
+    llenos: m.llenos.map((c) => (c.sensible ? { ...c, valor: ocultar(c.valor) } : c)),
+    requiere_confirmacion: m.requiere_confirmacion.map((c) =>
+      c.sensible ? { ...c, valor_propuesto: ocultar(c.valor_propuesto) } : c,
+    ),
+  }
+}

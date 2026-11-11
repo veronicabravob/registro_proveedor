@@ -152,3 +152,27 @@ describe("iniciarTelemetria con destinos", () => {
     await t.apagar()
   })
 })
+
+describe("procesador de enmascarado", () => {
+  it("enmascara atributos de cualquier span (también los del SDK del modelo) antes de exportar", async () => {
+    const { crearProcesadorEnmascarado } = await import("../src/telemetry/enmascarar.ts")
+    const memoria = new InMemorySpanExporter()
+    const proveedorTrazas = new NodeTracerProvider({
+      spanProcessors: [
+        crearProcesadorEnmascarado(crearEnmascarador(valoresSensibles({ directory: raiz }))),
+        new SimpleSpanProcessor(memoria),
+      ],
+    })
+    const span = proveedorTrazas.getTracer("com.anthropic.sdk.typescript").startSpan("anthropic.messages.create")
+    span.setAttribute(
+      "gen_ai.input.messages",
+      JSON.stringify([{ role: "user", content: '{"valor":"03100012345","swift":"COLOCOBM"}' }]),
+    )
+    span.setAttribute("gen_ai.usage.input_tokens", 120)
+    span.end()
+    const exportado = memoria.getFinishedSpans()[0]
+    assert.doesNotMatch(String(exportado?.attributes["gen_ai.input.messages"]), /03100012345|COLOCOBM/)
+    assert.equal(exportado?.attributes["gen_ai.usage.input_tokens"], 120)
+    await proveedorTrazas.shutdown()
+  })
+})

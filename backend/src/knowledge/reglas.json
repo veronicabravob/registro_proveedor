@@ -30,5 +30,12 @@
     "estados_financieros": "Estados financieros",
     "certificado_iso_9001": "Certificado ISO 9001",
     "certificado_cumplimiento_tributario": "Certificado de cumplimiento tributario"
+  },
+  "nombres_pais": {
+    "CO": "Colombia",
+    "EC": "Ecuador",
+    "PE": "Perú",
+    "PA": "Panamá",
+    "HN": "Honduras"
   }
 }

@@ -4,7 +4,15 @@ import { z } from "zod"
 import { type Formato, leerCaso, leerGlosario, leerIndiceSoportes, leerJson, leerMaestro, leerPlantilla } from "./lib/datos.ts"
 import { definirHerramienta, type Ejecucion } from "./lib/definir.ts"
 import { generarPdf, generarValoresPortal, generarXlsx } from "./lib/formularios.ts"
-import { equivalenteTributario, formatearValor, type Mapeo, MapeoArchivoSchema, mapearCampos } from "./lib/mapeo.ts"
+import {
+  equivalenteTributario,
+  formatearValor,
+  type Mapeo,
+  MapeoArchivoSchema,
+  mapearCampos,
+  ocultarSensibles,
+  valorEnRuta,
+} from "./lib/mapeo.ts"
 import { bloqueosDeFirma, borradorCorreoMd, checklistMd, evaluarSoportes } from "./lib/paquete.ts"
 import { nombreSoporte, reglas } from "./lib/reglas.ts"
 import { casoArg, dirSalida, rutaRelativa, rutas } from "./lib/rutas.ts"
@@ -125,7 +133,8 @@ export const mapear_campos = definirHerramienta("proveedor_mapear_campos", {
 
     const { llenos, faltantes, requiere_confirmacion } = mapeo
     return {
-      data: mapeo,
+      // Minimización de datos: el modelo (y sus trazas) nunca recibe valores sensibles completos.
+      data: ocultarSensibles(mapeo),
       resumen: `${llenos.length} llenos, ${requiere_confirmacion.length} por confirmar, ${faltantes.length} sin dato.`,
     }
   },
@@ -154,7 +163,10 @@ export const generar_formulario = definirHerramienta("proveedor_generar_formular
     }
 
     const destino = join(dir, ARCHIVO_FORMULARIO[solicitud.formato])
-    const enc = { caso, solicitud, fechaEjecucion: fechaDe(ctx) }
+    const maestro = leerMaestro(ctx)
+    const nombre = formatearValor(valorEnRuta(maestro, "representante_legal.nombre"))
+    const cargo = formatearValor(valorEnRuta(maestro, "representante_legal.cargo"))
+    const enc = { caso, solicitud, fechaEjecucion: fechaDe(ctx), ...(nombre && cargo ? { firmante: { nombre, cargo } } : {}) }
     const ruta = rutaRelativa(ctx, destino)
     if (solicitud.formato === "xlsx") {
       const plantilla = leerPlantilla(ctx, caso, "xlsx")

@@ -1,3 +1,5 @@
+import type { SpanProcessor } from "@opentelemetry/sdk-trace-node"
+
 /**
  * Enmascarado de datos sensibles antes de exportar trazas (NIST AI RMF: privacidad).
  * Se construye con los valores sensibles reales del maestro (cuenta, SWIFT, cédula), de modo que
@@ -21,4 +23,27 @@ export function crearEnmascarador(valoresSensibles: readonly string[]): Enmascar
     return dato
   }
   return (dato) => recorrer(dato, 0)
+}
+
+type SpanMutable = Parameters<NonNullable<SpanProcessor["onEnding"]>>[0]
+
+/**
+ * Procesador que enmascara TODOS los atributos de texto de cada span justo antes de que termine
+ * (hook onEnding, cuando el span aún se puede modificar). Se registra antes de los exportadores,
+ * así cubre también los spans del SDK del modelo, no solo los del agente.
+ */
+export function crearProcesadorEnmascarado(enmascarar: Enmascarador): SpanProcessor {
+  return {
+    onStart() {},
+    onEnding(span: SpanMutable) {
+      for (const [clave, valor] of Object.entries(span.attributes)) {
+        if (typeof valor !== "string") continue
+        const limpio = enmascarar(valor)
+        if (limpio !== valor && typeof limpio === "string") span.setAttribute(clave, limpio)
+      }
+    },
+    onEnd() {},
+    forceFlush: async () => {},
+    shutdown: async () => {},
+  }
 }
