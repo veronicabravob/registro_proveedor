@@ -51,11 +51,30 @@ Con Bun: `bun install && bun run demo.ts` (verificación) y `bun run backend/src
 ## Verificación sin modelo
 
 ```bash
-npm run demo              # o: bun install && bun run demo.ts
+npm run demo                               # o: bun install && bun run demo.ts
+FECHA_EJECUCION=2026-09-03 npm run demo    # con la fecha del PRD
 ```
 
-Limpia `out/`, ejecuta los 4 casos de `fixtures/reto-01/casos/` llamando directamente a las
-herramientas e imprime un resumen por caso. No necesita ninguna clave.
+`demo.ts` (PRD §6.6) ejecuta los mismos pasos del agente llamando directamente a las herramientas,
+**sin modelo de lenguaje ni ninguna clave**. Corre en la terminal y en el CI, no en la interfaz:
+
+| Qué demuestra             | Cómo                                                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Flujo completo por caso   | Para los 4 casos de `fixtures/reto-01/casos/`: leer solicitud → mapear campos → generar formulario → armar paquete      |
+| Lo que falta, explícito   | Imprime faltantes, campos que requieren confirmación y bloqueos de firma de cada caso                                   |
+| Robustez (HU-5)           | Un caso inexistente y una ruta no permitida (`../etc`) devuelven `{ ok: false, error }` claro, sin excepción            |
+| Confirmación humana (RN4) | El envío sin aprobación del host se rechaza; con aprobación escribe solo `out/<caso>/ENVIO-SIMULADO.md`                 |
+| Determinismo              | Borra `out/` al inicio y fija la fecha con `FECHA_EJECUCION`: con la misma fecha, el mismo resultado (salvo timestamps) |
+
+Termina con una tabla por caso: formato, si quedó listo para firma y número de faltantes.
+
+**Sobre la fecha.** La Cámara de Comercio del repositorio vence el 2026-09-30 y la exigen los 4
+casos. Con la fecha actual ningún paquete queda listo para firma, y es el comportamiento correcto
+(RN3). Con `FECHA_EJECUCION=2026-09-03`, la fecha del PRD, `co-industrias-delta` queda **listo
+para firma**, `ec-corp-andina` se bloquea por un soporte ausente y `hn-agroexport-sula` por los
+parafiscales vencidos.
+
+El CI ejecuta `demo.ts` sin claves en cada rama y falla si falta algún formulario o checklist.
 
 ## Scripts
 
