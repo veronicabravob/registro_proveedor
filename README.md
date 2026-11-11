@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/veronicabravob/registro_proveedor/actions/workflows/ci.yml/badge.svg)](https://github.com/veronicabravob/registro_proveedor/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/veronicabravob/registro_proveedor/actions/workflows/codeql.yml/badge.svg)](https://github.com/veronicabravob/registro_proveedor/actions/workflows/codeql.yml)
+[![Agente para otras plataformas](https://img.shields.io/github/v/release/veronicabravob/registro_proveedor?label=agente%20descargable)](https://github.com/veronicabravob/registro_proveedor/releases/latest)
 
 Agente que, a partir de una solicitud de un cliente, **identifica los campos pedidos, los llena desde
 el repositorio maestro, genera el formulario en el formato del cliente (Excel, PDF o valores para
@@ -12,12 +13,22 @@ Reto técnico 01 · Periferia IT Group. Especificación en [`docs/PRD.md`](docs/
 
 ## Link de prueba
 
-|                     |                                                                                |
-| ------------------- | ------------------------------------------------------------------------------ |
-| **URL**             | https://registro-proveedor-fl6d.onrender.com                                   |
-| **Clave de acceso** | Se entrega por separado al equipo evaluador (el front la pide la primera vez). |
+|                     |                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| **URL**             | https://registro-proveedor-fl6d.onrender.com                                             |
+| **Clave de acceso** | `periferia-b29710f79af9` (el front la pide la primera vez; para la API, header `x-access-key`) |
+
+> La clave se publica porque el PRD (§6.1, §9.2) lo pide. Solo protege el costo del modelo: los
+> datos son ficticios y el envío es simulado. Además de la clave hay topes de tokens por sesión
+> (`MAX_TOKENS_PER_SESSION`), un tope global diario (`MAX_TOKENS_PER_DAY`) y límite de solicitudes
+> por IP y minuto.
 
 > Plan gratuito de Render: si el servicio estuvo inactivo, la primera carga tarda ~1 minuto en despertar.
+
+> **¿Por qué ningún paquete sale "listo para firma"?** Con la fecha real, la Cámara de Comercio del
+> repositorio (vence el 2026-09-30) está vencida y la exigen los 4 casos, así que el agente bloquea
+> la firma (RN3): es el comportamiento correcto. Con `FECHA_EJECUCION=2026-09-03`, la fecha del PRD,
+> `co-industrias-delta` sale listo. Detalle en [Verificación sin modelo](#verificación-sin-modelo).
 
 Prueba sugerida (PRD §11), en una sesión nueva:
 
@@ -29,6 +40,31 @@ está listo para firma y qué soportes debo actualizar. No envíes nada todavía
 O simplemente elige la tarjeta **Corporación Andina** en la pantalla de inicio. Luego escribe `envía`:
 el agente pide confirmación (tarjeta verde con botones) y solo tras un "sí" explícito registra el
 envío simulado (`out/ec-corp-andina/ENVIO-SIMULADO.md`).
+
+## Agente reutilizable para otras plataformas (bonus)
+
+El agente se entrega también como paquete independiente de este servidor (PRD §9.4), listo para
+integrarse en otras plataformas de agentes.
+
+|              |                                                                                                                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Descarga** | [`agente-registro-proveedor.zip`](https://github.com/veronicabravob/registro_proveedor/releases/latest/download/agente-registro-proveedor.zip) (enlace estable a la última versión) |
+| **Releases** | https://github.com/veronicabravob/registro_proveedor/releases                                                                                                                       |
+| **Guía**     | [`modulo/README.md`](modulo/README.md): contenido, prueba en un minuto e integración paso a paso                                                                                    |
+
+| Pieza                                      | Qué es                                                                                                | Se genera desde (misma fuente que la app)     |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `modulo/agent.md`                          | Frontmatter (`description`, `mode: primary`, `permission { edit: deny, bash: deny }`) + system prompt | `backend/agent/prompt.md`                     |
+| `modulo/skill/registro-proveedor/SKILL.md` | Frontmatter (`name`, `description`) + conocimiento del proceso                                        | `backend/src/knowledge/registro-proveedor.md` |
+| `modulo/tools/proveedor.ts`                | Las mismas 6 herramientas zod, importables sin el servidor                                            | Re-exporta `backend/src/tools/proveedor.ts`   |
+
+**Sin copias divergentes.** `npm run modulo` regenera las piezas y `npm run modulo:check` falla si
+alguna difiere de la app; el CI lo ejecuta en cada push.
+
+**Publicar una nueva versión.** Basta con un tag `v*` (p. ej. `git tag v1.1.0 && git push origin v1.1.0`):
+el workflow [`.github/workflows/publicar-agente.yml`](.github/workflows/publicar-agente.yml) arma el
+`.zip` desde esas mismas fuentes, lo instala y prueba de forma aislada, y lo adjunta a la release.
+Para armarlo en local: `npm run modulo:empaquetar` (queda en `dist/agente-registro-proveedor/`).
 
 ## Levantar en local (un comando)
 
@@ -93,16 +129,18 @@ El CI ejecuta `demo.ts` sin claves en cada rama y falla si falta algún formular
 
 Todas documentadas en [`.env.example`](.env.example). Las principales:
 
-| Variable                                             | Obligatoria       | Descripción                                                                                       |
-| ---------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------- |
-| `ANTHROPIC_API_KEY`                                  | Sí (para el chat) | Clave del modelo. Solo en el entorno del backend; nunca en el repo, el front, los logs ni la API. |
-| `LLM_MODEL`                                          | No                | Por defecto `claude-opus-5-5`.                                                                    |
-| `LLM_EFFORT`                                         | No                | `low` · `medium` (defecto) · `high`…                                                              |
-| `APP_ACCESS_KEY`                                     | No                | Si se define, la API y el front exigen esta clave.                                                |
-| `MAX_ITERATIONS_PER_TURN` / `MAX_TOKENS_PER_SESSION` | No                | Topes de costo por turno y por sesión.                                                            |
-| `RATE_LIMIT_PER_MINUTE`                              | No                | Solicitudes de chat por IP y minuto.                                                              |
-| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`        | No                | Trazas del agente en Langfuse (OpenTelemetry).                                                    |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`                        | No                | Trazas y métricas a cualquier backend OTLP/HTTP.                                                  |
+| Variable                                             | Obligatoria       | Descripción                                                                                                    |
+| ---------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`                                  | Sí (para el chat) | Clave del modelo. Solo en el entorno del backend; nunca en el repo, el front, los logs ni la API.              |
+| `LLM_MODEL`                                          | No                | Por defecto `claude-opus-5-5`.                                                                                 |
+| `LLM_EFFORT`                                         | No                | `low` · `medium` (defecto) · `high`…                                                                           |
+| `APP_ACCESS_KEY`                                     | No                | Si se define, la API y el front exigen esta clave.                                                             |
+| `MAX_ITERATIONS_PER_TURN` / `MAX_TOKENS_PER_SESSION` | No                | Topes de costo por turno y por sesión.                                                                         |
+| `MAX_TOKENS_PER_DAY`                                 | No                | Tope global diario de tokens (todas las sesiones); al alcanzarlo el chat se detiene hasta el día siguiente.    |
+| `TRUSTED_PROXIES`                                    | No                | Proxies de confianza delante del servidor (en Render, 1): el límite por IP usa la IP real que agrega el proxy. |
+| `RATE_LIMIT_PER_MINUTE`                              | No                | Solicitudes de chat por IP y minuto.                                                                           |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`        | No                | Trazas del agente en Langfuse (OpenTelemetry).                                                                 |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`                        | No                | Trazas y métricas a cualquier backend OTLP/HTTP.                                                               |
 
 ## API
 
@@ -159,12 +197,6 @@ llamada al modelo con sus tokens y latencias, agrupados por conversación. Basta
 enmascaran antes de exportar. Detalle en [`SOLUCION.md`](SOLUCION.md#11-observabilidad-con-langfuse).
 
 Trace de ejemplo (procesar un caso de punta a punta): [abrir en Langfuse](https://us.cloud.langfuse.com/project/cmwbfksbk04w7ad0efkeyfx6f/traces/768206b4bc320d349c148ead86a2294d).
-
-## Integración con otras plataformas de agentes
-
-El agente se puede usar sin este servidor: descarga
-[`agente-registro-proveedor.zip`](https://github.com/veronicabravob/registro_proveedor/releases/latest/download/agente-registro-proveedor.zip)
-(o `npm run modulo:empaquetar`) y sigue la guía de [`modulo/README.md`](modulo/README.md).
 
 ## Flujo de trabajo y quality gates
 
