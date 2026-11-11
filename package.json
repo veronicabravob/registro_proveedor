@@ -30,7 +30,6 @@
     "@opentelemetry/sdk-metrics": "^2.12.1",
     "@opentelemetry/sdk-node": "^0.223.1",
     "@opentelemetry/sdk-trace-node": "^2.12.1",
-    "@opentelemetry/semantic-conventions": "^1.45.0",
     "exceljs": "^4.4.0",
     "hono": "^4.13.17",
     "pdf-lib": "^1.17.1",

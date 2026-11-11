@@ -1,40 +1,122 @@
-# registro_proveedor
+# Registro como Proveedor — agente conversacional
 
-Agente conversacional **"Registro como Proveedor"** — Reto técnico 01, Periferia IT Group.
-Especificación en [`docs/PRD.md`](docs/PRD.md); planteamiento de la solución en [`SOLUCION.md`](SOLUCION.md).
+[![CI](https://github.com/veronicabravob/registro_proveedor/actions/workflows/ci.yml/badge.svg)](https://github.com/veronicabravob/registro_proveedor/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/veronicabravob/registro_proveedor/actions/workflows/codeql.yml/badge.svg)](https://github.com/veronicabravob/registro_proveedor/actions/workflows/codeql.yml)
+
+Agente que, a partir de una solicitud de un cliente, **identifica los campos pedidos, los llena desde
+el repositorio maestro, genera el formulario en el formato del cliente (Excel, PDF o valores para
+portal) y arma el paquete para la firma del representante legal**. Nunca firma ni envía: prepara y
+pide confirmación humana.
+
+Reto técnico 01 · Periferia IT Group. Especificación en [`docs/PRD.md`](docs/PRD.md) · planteamiento en [`SOLUCION.md`](SOLUCION.md).
+
+## Link de prueba
+
+|                     |                                                                                |
+| ------------------- | ------------------------------------------------------------------------------ |
+| **URL**             | https://registro-proveedor-fl6d.onrender.com                                   |
+| **Clave de acceso** | Se entrega por separado al equipo evaluador (el front la pide la primera vez). |
+
+> Plan gratuito de Render: si el servicio estuvo inactivo, la primera carga tarda ~1 minuto en despertar.
+
+Prueba sugerida (PRD §11), en una sesión nueva:
+
+```
+Procesa el caso "ec-corp-andina". Dime qué campos quedaron llenos, cuáles faltan, si el paquete
+está listo para firma y qué soportes debo actualizar. No envíes nada todavía.
+```
+
+Luego escribe `envía`: el agente pide confirmación (se resalta en amarillo) y solo tras un "sí"
+explícito escribe `out/ec-corp-andina/ENVIO-SIMULADO.md`.
+
+## Levantar en local (un comando)
+
+Requisitos: **Node 22+** (o Bun).
+
+```bash
+cp .env.example .env      # poner ANTHROPIC_API_KEY
+npm install
+npm run dev               # front + backend en http://localhost:3000
+```
+
+Con Bun: `bun install && bun run src/server.ts`.
+
+## Verificación sin modelo
+
+```bash
+npm run demo              # o: bun install && bun run demo.ts
+```
+
+Limpia `out/`, ejecuta los 4 casos de `fixtures/reto-01/casos/` llamando directamente a las
+herramientas e imprime un resumen por caso. No necesita ninguna clave.
+
+## Scripts
+
+| Script                               | Qué hace                                             |
+| ------------------------------------ | ---------------------------------------------------- |
+| `npm run dev` / `npm start`          | Servidor con front (watch / producción)              |
+| `npm run demo`                       | Herramientas sin modelo (PRD §6.6)                   |
+| `npm test` / `npm run test:coverage` | Pruebas (`node:test`) / con umbrales de cobertura    |
+| `npm run lint` / `npm run format`    | Biome: lint y formato                                |
+| `npm run typecheck`                  | TypeScript estricto, sin `any`                       |
+| `npm run modulo` / `modulo:check`    | Genera / verifica el módulo reutilizable (`modulo/`) |
+
+## Variables de entorno
+
+Todas documentadas en [`.env.example`](.env.example). Las principales:
+
+| Variable                                             | Obligatoria       | Descripción                                                                                       |
+| ---------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`                                  | Sí (para el chat) | Clave del modelo. Solo en el entorno del backend; nunca en el repo, el front, los logs ni la API. |
+| `LLM_MODEL`                                          | No                | Por defecto `claude-opus-5-5`.                                                                    |
+| `LLM_EFFORT`                                         | No                | `low` · `medium` (defecto) · `high`…                                                              |
+| `APP_ACCESS_KEY`                                     | No                | Si se define, la API y el front exigen esta clave.                                                |
+| `MAX_ITERATIONS_PER_TURN` / `MAX_TOKENS_PER_SESSION` | No                | Topes de costo por turno y por sesión.                                                            |
+| `RATE_LIMIT_PER_MINUTE`                              | No                | Solicitudes de chat por IP y minuto.                                                              |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`        | No                | Trazas del agente en Langfuse (OpenTelemetry).                                                    |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`                        | No                | Trazas y métricas a cualquier backend OTLP/HTTP.                                                  |
+
+## API
+
+| Método | Ruta                    | Cuerpo / respuesta                                                                                                        |
+| ------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/api/chat`             | `{ sessionId?, message, confirm? }` → `{ sessionId, reply, toolCalls[], needsConfirmation, pendingAction, error, usage }` |
+| `GET`  | `/api/sessions/:id`     | Historial completo visible de la sesión                                                                                   |
+| `GET`  | `/api/health`           | `{ ok: true, provider, model, ... }` sin exponer claves                                                                   |
+| `GET`  | `/api/casos`            | Casos disponibles con cliente, país y formato                                                                             |
+| `GET`  | `/api/archivos/out/...` | Descarga de archivos generados (solo dentro de `out/`)                                                                    |
+
+Si hay `APP_ACCESS_KEY`, todas las rutas salvo `/api/health` requieren el header `x-access-key`.
+
+```bash
+curl -s https://registro-proveedor-fl6d.onrender.com/api/chat \
+  -H "Content-Type: application/json" -H "x-access-key: <CLAVE_DE_ACCESO>" \
+  -d '{"message":"Procesa el caso co-industrias-delta"}'
+```
 
 ## Estructura
 
 ```
-agent/prompt.md            system prompt (comportamiento)
-src/knowledge/             conocimiento del proceso (reglas de negocio)
-src/tools/                 herramientas tipadas con zod (ejecución)
-src/llm/                   adaptador del proveedor LLM
-src/server.ts              API HTTP + ciclo del agente
-web/                       front de chat
-fixtures/reto-01/          entregados por Periferia (no modificar)
-out/                       generado en ejecución (ignorado por git)
-demo.ts                    herramientas sin modelo
+agent/prompt.md            comportamiento (system prompt)
+src/knowledge/             conocimiento: proceso (md) y reglas de negocio (json)
+src/tools/                 ejecución: herramientas zod → proveedor_<export>
+src/agent/                 ciclo del agente, sesiones, confirmación humana
+src/llm/                   interfaz de proveedor + implementación Anthropic
+src/telemetry/             OpenTelemetry → Langfuse / OTLP, métricas, enmascarado
+src/http/                  API Hono y seguridad (CSP, rate limit, clave)
+web/                       front de chat sin dependencias
 modulo/                    bonus: agente empaquetado reutilizable
+fixtures/reto-01/          entregados por Periferia (no modificar)
+test/                      pruebas unitarias, de ciclo, de API y del módulo
+demo.ts                    verificación sin modelo
+render.yaml                despliegue como código (Render Blueprint)
 ```
 
-## Requisitos
+## Flujo de trabajo y quality gates
 
-Node 20+ (o Bun).
-
-## Uso
-
-```bash
-cp .env.example .env    # completar LLM_PROVIDER, LLM_MODEL, LLM_API_KEY
-npm install
-npm run dev             # front + backend en local
-npm run demo            # herramientas sin modelo (equivale a: bun run demo.ts)
-```
-
-## Variables de entorno
-
-Ver [`.env.example`](.env.example). La clave del modelo solo vive en el entorno del backend.
-
-## Link de prueba
-
-_Pendiente._
+- Una rama por funcionalidad (`feature/*`, `ci/*`, `deploy/*`, `docs/*`), commits convencionales y
+  merge `--no-ff` a `main` **solo con CI en verde**.
+- Cada push corre: Biome, `tsc` estricto, pruebas con cobertura mínima (85 % líneas, 75 % ramas),
+  `demo.ts` sin claves, verificación del módulo, `npm audit` y gitleaks. CodeQL en `main` y PR;
+  dependency review y Dependabot semanales.
+- Ruleset de protección de `main` versionado en `.github/rulesets/main.json`.
