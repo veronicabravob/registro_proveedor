@@ -1,0 +1,49 @@
+# Blueprint de Render (infraestructura como código).
+# Render → New → Blueprint → seleccionar este repositorio. Los secretos (sync: false) se
+# ingresan en el panel de Render y nunca quedan en el repositorio.
+services:
+  - type: web
+    name: registro-proveedor
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: LLM_PROVIDER
+        value: anthropic
+      - key: LLM_MODEL
+        value: claude-opus-5-5
+      - key: LLM_EFFORT
+        value: medium
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Protege el link público para que nadie gaste la clave del modelo sin permiso.
+      - key: APP_ACCESS_KEY
+        sync: false
+      - key: MAX_ITERATIONS_PER_TURN
+        value: "25"
+      - key: MAX_TOKENS_PER_SESSION
+        value: "400000"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "20"
+      # Observabilidad (opcional): trazas del agente en Langfuse.
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_BASE_URL
+        value: https://cloud.langfuse.com
+      - key: TELEMETRY_CONTENT_MODE
+        value: content
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        sync: false
