@@ -1,0 +1,24 @@
+{
+  "name": "registro-proveedor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agente conversacional \"Registro como Proveedor\" — Reto 01 Periferia IT Group",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "demo": "tsx demo.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
