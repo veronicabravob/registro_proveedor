@@ -9,7 +9,8 @@ services:
     region: oregon
     branch: main
     autoDeploy: true
-    buildCommand: npm ci && npm run build
+    # NODE_ENV=production omite devDependencies; el build del front las necesita (Vite, tipos).
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
