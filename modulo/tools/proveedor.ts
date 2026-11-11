@@ -1,2 +1,5 @@
-// Bonus §9.4: re-exporta las MISMAS herramientas de la aplicación (sin copias divergentes).
+// Generado por scripts/generar-modulo.ts. Bonus PRD §9.4.
+// Re-exporta las MISMAS herramientas de la aplicación: no hay copias que puedan divergir.
+// Cada export se registra en la plataforma de agentes como `proveedor_<export>`.
 export * from "../../src/tools/proveedor.ts"
+export type { Tool, ToolContext, ToolResult } from "../../src/tools/types.ts"
