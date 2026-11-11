@@ -91,7 +91,9 @@ function cargarArchivoEnv(): void {
 
 export function cargarConfiguracion(env: NodeJS.ProcessEnv = process.env, leerArchivo = true): Configuracion {
   if (leerArchivo) cargarArchivoEnv()
-  const r = EntornoSchema.safeParse(env)
+  // Una variable vacía (`FECHA_EJECUCION=` copiada de .env.example) equivale a no definida.
+  const definidas = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined && v.trim() !== ""))
+  const r = EntornoSchema.safeParse(definidas)
   if (!r.success) {
     const detalle = r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")
     throw new Error(`Configuración inválida: ${detalle}`)

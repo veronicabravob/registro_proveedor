@@ -4,8 +4,76 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Registro como Proveedor</title>
+  <meta name="description" content="Agente que prepara formularios de registro como proveedor y el paquete para firma.">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
 </head>
 <body>
-  <!-- TODO: front de chat -->
+  <header class="barra">
+    <div class="marca">
+      <span class="logo" aria-hidden="true">RP</span>
+      <div>
+        <h1>Registro como Proveedor</h1>
+        <p class="sub">Prepara formularios y paquetes para firma · nunca firma ni envía</p>
+      </div>
+    </div>
+    <div class="estado">
+      <span id="estado-modelo" class="pildora" title="Proveedor y modelo">conectando…</span>
+      <button id="nueva-sesion" class="boton secundario" type="button">Nueva sesión</button>
+    </div>
+  </header>
+
+  <div class="contenedor">
+    <aside class="lateral" aria-label="Casos disponibles">
+      <h2>Casos</h2>
+      <ul id="casos" class="casos"><li class="cargando">Cargando…</li></ul>
+      <h2>Acciones rápidas</h2>
+      <div class="rapidas">
+        <button type="button" class="chip" data-mensaje="¿Qué casos hay disponibles y en qué formato los piden?">Ver casos</button>
+        <button type="button" class="chip" data-mensaje="¿Qué soportes están vencidos o faltan en el último caso procesado?">Soportes pendientes</button>
+        <button type="button" class="chip" data-mensaje="envía">Enviar paquete</button>
+      </div>
+      <p class="nota">Las llamadas a herramientas se muestran en el chat. Las acciones externas siempre piden tu confirmación.</p>
+    </aside>
+
+    <main class="chat">
+      <section id="mensajes" class="mensajes" aria-live="polite" aria-label="Conversación">
+        <div class="bienvenida">
+          <h2>Hola 👋</h2>
+          <p>Elige un caso a la izquierda o escribe, por ejemplo:</p>
+          <button type="button" class="ejemplo" data-mensaje='Procesa el caso "ec-corp-andina". Dime qué campos quedaron llenos, cuáles faltan, si el paquete está listo para firma y qué soportes debo actualizar. No envíes nada todavía.'>
+            Procesa el caso “ec-corp-andina”. Dime qué campos quedaron llenos, cuáles faltan, si el paquete está listo para firma y qué soportes debo actualizar. No envíes nada todavía.
+          </button>
+        </div>
+      </section>
+
+      <div id="confirmacion" class="confirmacion" hidden role="alertdialog" aria-labelledby="confirmacion-titulo">
+        <div>
+          <strong id="confirmacion-titulo">⚠️ El agente necesita tu confirmación</strong>
+          <p id="confirmacion-detalle"></p>
+        </div>
+        <div class="acciones">
+          <button id="confirmar-si" class="boton peligro" type="button">Sí, confirmar</button>
+          <button id="confirmar-no" class="boton secundario" type="button">No, cancelar</button>
+        </div>
+      </div>
+
+      <form id="formulario" class="compositor">
+        <label for="entrada" class="oculto">Mensaje</label>
+        <textarea id="entrada" rows="2" maxlength="4000" placeholder="Escribe un mensaje… (Enter envía, Shift+Enter salto de línea)" required></textarea>
+        <button id="enviar" class="boton" type="submit">Enviar</button>
+      </form>
+      <p id="uso" class="uso"></p>
+    </main>
+  </div>
+
+  <dialog id="dialogo-clave">
+    <form method="dialog" id="form-clave">
+      <h2>Clave de acceso</h2>
+      <p>Este despliegue está protegido. Ingresa la clave de acceso.</p>
+      <input id="clave" type="password" autocomplete="current-password" required>
+      <menu><button type="submit" class="boton" value="ok">Continuar</button></menu>
+    </form>
+  </dialog>
 </body>
 </html>
