@@ -36,7 +36,7 @@ jobs:
         with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
       - run: npm ci
       - run: npm run typecheck
-      - name: Módulo reutilizable sincronizado con la app (bonus §9.4)
+      - name: Agente para otras plataformas sincronizado con la app
         run: npm run modulo:check
 
   test:

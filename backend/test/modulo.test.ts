@@ -9,7 +9,7 @@ import * as app from "../src/tools/proveedor.ts"
 
 const raiz = fileURLToPath(new URL("../..", import.meta.url))
 
-describe("bonus · módulo reutilizable (PRD §9.4)", () => {
+describe("agente para otras plataformas (PRD §9.4)", () => {
   it("las tres piezas están sincronizadas con las fuentes de la aplicación", () => {
     for (const [ruta, esperado] of Object.entries(piezasDelModulo())) {
       const actual = readFileSync(join(raiz, ruta), "utf8").replaceAll("\r\n", "\n")
@@ -34,5 +34,39 @@ describe("bonus · módulo reutilizable (PRD §9.4)", () => {
       ok: boolean
     }
     assert.equal(r.ok, true)
+  })
+})
+
+describe("paquete descargable del agente", () => {
+  it("se arma con agente, skill, herramientas, reglas y datos, y funciona sin el servidor", async () => {
+    const { mkdirSync, mkdtempSync, existsSync, rmSync } = await import("node:fs")
+    // Dentro del repo para resolver dependencias; la instalación aislada se prueba en el workflow de publicación.
+    mkdirSync(join(raiz, "dist"), { recursive: true })
+    const { empaquetar } = await import("../scripts/empaquetar-modulo.ts")
+    const base = mkdtempSync(join(raiz, "dist", "prueba-"))
+    try {
+      const destino = empaquetar(base)
+      for (const archivo of [
+        "agent.md",
+        "skill/registro-proveedor/SKILL.md",
+        "tools/proveedor.ts",
+        "knowledge/reglas.json",
+        "package.json",
+        "ejemplo.ts",
+        "README.md",
+      ]) {
+        assert.ok(existsSync(join(destino, archivo)), archivo)
+      }
+      assert.equal(readFileSync(join(destino, "agent.md"), "utf8"), readFileSync(join(raiz, "modulo/agent.md"), "utf8"))
+      const herramientas = (await import(
+        `file://${join(destino, "tools", "proveedor.ts").replaceAll("\\", "/")}`
+      )) as typeof modulo
+      const r = JSON.parse(
+        await herramientas.leer_solicitud.execute({ caso: "pa-logistica-istmo" }, { directory: destino, sessionId: "paquete" }),
+      ) as { ok: boolean }
+      assert.equal(r.ok, true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
   })
 })

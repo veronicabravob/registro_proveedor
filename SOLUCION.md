@@ -13,28 +13,30 @@ administrativa (dependencia de una persona) y a finanzas (días de retraso para 
 ## 2. Arquitectura
 
 ```
-┌──────────────────────┐  HTTP JSON  ┌───────────────────────────────────────────────────────┐
-│ frontend/ (React)    │ ──────────▶ │ src/http/app.ts  Hono · CSP · rate limit · clave      │
-│ · historial          │ ◀────────── │        │                                              │
-│ · pasos en vivo (SSE)│             │ src/agent/servicio.ts  sesión (memoria, TTL, LRU)     │
-│ · banner confirmación│             │        │                                              │
-└──────────────────────┘             │ src/agent/ciclo.ts  ReAct · topes · puerta humana     │
-                                     │        │                     │                        │
-                                     │ src/llm/adapter.ts      src/tools/index.ts            │
-                                     │  └ anthropic.ts (Claude)     └ proveedor.ts (zod)     │
-                                     │        │                     │                        │
-                                     │ src/telemetry/ ── OpenTelemetry ──▶ Langfuse / OTLP   │
-                                     └────────┼─────────────────────┼────────────────────────┘
-                                              │                     │
-                              backend/agent/ + backend/src/knowledge/   fixtures/ (solo lectura)
-                              (system prompt estable)            out/      (escritura)
+┌────────────────────────┐ HTTP + SSE ┌─────────────────────── backend/ (Node + TypeScript) ───────────────────────┐
+│ frontend/ (React+Vite) │ ─────────▶ │ src/http/app.ts        Hono · CSP · rate limit · clave · streaming SSE      │
+│ · bandeja de casos     │ ◀───────── │ src/agent/servicio.ts  sesiones en memoria (TTL, LRU, sin turnos paralelos) │
+│ · pasos en vivo        │            │ src/agent/ciclo.ts     ReAct · topes de pasos y tokens · puerta humana      │
+│ · confirmación humana  │            │        │                               │                                    │
+│ · descargas            │            │ src/llm/adapter.ts ──▶ anthropic.ts     src/tools/proveedor.ts (zod)         │
+└────────────────────────┘            │  (interfaz propia)     Claude Opus 5.5   lib/: mapeo · formularios · paquete │
+                                      │        │                               │                                    │
+                                      │ src/telemetry/  OpenTelemetry: spans del turno, de cada herramienta y del   │
+                                      │                 modelo + métricas · enmascarado antes de exportar           │
+                                      └────────┼───────────────────────────────┼──────────────┼──────────────────────┘
+                                               │                               │              │
+                      backend/agent/prompt.md  │      fixtures/ (solo lectura) │   out/ (escritura)
+                      backend/src/knowledge/   │                               │
+                                               ▼
+                                   Langfuse Cloud (trazas por sesión) · cualquier backend OTLP (métricas)
 ```
 
-| Capa               | Dónde vive                                                    | Qué contiene                                                                                                                                                                                                  |
-| ------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Comportamiento** | `backend/agent/prompt.md`                                     | Rol, orden de trabajo, regla "solo valores de herramientas", protocolo de confirmación, formato del resumen.                                                                                                  |
-| **Conocimiento**   | `backend/src/knowledge/registro-proveedor.md` + `reglas.json` | Proceso de negocio legible (se inyecta en el contexto) y parámetros que las herramientas aplican de forma determinista: identificador por país, umbrales de confianza, campos sensibles, nombres de soportes. |
-| **Ejecución**      | `backend/src/tools/proveedor.ts` (+ `lib/`)                   | 6 herramientas tipadas con zod, sin dependencia del servidor, importables desde `demo.ts` y desde `modulo/`.                                                                                                  |
+| Capa               | Dónde vive                                                    | Qué contiene                                                                                                                                                                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Comportamiento** | `backend/agent/prompt.md`                                     | Rol, orden de trabajo, regla "solo valores de herramientas", protocolo de confirmación, formato del resumen.                                                                                                                                                                                    |
+| **Conocimiento**   | `backend/src/knowledge/registro-proveedor.md` + `reglas.json` | Proceso de negocio legible (se inyecta en el contexto) y parámetros que las herramientas aplican de forma determinista: identificador por país, umbrales de confianza, campos sensibles, nombres de soportes.                                                                                   |
+| **Ejecución**      | `backend/src/tools/proveedor.ts` (+ `lib/`)                   | 6 herramientas tipadas con zod, sin dependencia del servidor, importables desde `demo.ts` y desde `modulo/`.                                                                                                                                                                                    |
+| **Observabilidad** | `backend/src/telemetry/`                                      | Trazas OpenTelemetry de cada turno (agente → herramientas → modelo) hacia Langfuse, métricas de tokens, costo y negocio, y enmascarado de datos sensibles. Desacoplada del ciclo mediante un puerto `Observador`: si no hay claves, no hace nada. Detalle y traces de ejemplo en la sección 11. |
 
 Un cambio de reglas de negocio (p. ej. agregar Guatemala → NIT) se hace en `reglas.json` y en el
 `.md` de conocimiento; no toca el servidor ni el ciclo.
@@ -156,19 +158,20 @@ humano inicia sesión en una ventana del navegador controlado y el worker contin
 
 ## 6. Decisiones y trade-offs
 
-| #   | Decisión                                                                                               | Alternativa descartada                                 | Por qué                                                                                                                                                                                                                                                                                        |
-| --- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Mapeo determinista** (glosario → clave literal → similitud de Dice con umbrales 0,8 / 0,6) en código | Pedir al LLM que mapee etiquetas                       | Reproducible, auditable (ruta `maestro.json#clave`), probado y gratis; el LLM podría "completar" valores. La similitud cubre variantes; lo dudoso queda en `requiere_confirmacion`.                                                                                                            |
-| 2   | **Formulario desde `mapeo_id`** persistido                                                             | Pasar el mapeo (con valores) como argumento del modelo | Garantiza CA2 por diseño: el modelo no puede alterar un NIT o una cuenta en tránsito. Coste: una lectura de archivo.                                                                                                                                                                           |
-| 3   | **Ciclo propio** con adaptador `enviar()`                                                              | Tool Runner del SDK / frameworks (LangChain, AutoGen)  | El PRD exige que cambiar de proveedor no toque el ciclo, y la puerta de confirmación debe vivir en el host. Un agente único basta: multiagente (Wu et al., 2023) añadiría costo y latencia sin beneficio aquí.                                                                                 |
-| 4   | **Confirmación como herramienta + estado en el host**                                                  | Detectar "¿confirmas?" en el texto del modelo          | Señal estructurada y verificable; el front sabe exactamente qué acción y caso aprobar.                                                                                                                                                                                                         |
-| 5   | **PDF generado** con pdf-lib                                                                           | Rellenar un AcroForm                                   | El PRD lo acepta; no hay PDF original en los fixtures. pdf-lib es JS puro (sin binarios nativos).                                                                                                                                                                                              |
-| 6   | **Sesiones en memoria** con TTL y LRU                                                                  | Base de datos / archivo                                | No-objetivo del PRD; en Render free el disco es efímero. Se pierde el historial al reiniciar (aceptado).                                                                                                                                                                                       |
-| 7   | **OpenTelemetry neutral** + Langfuse como destino                                                      | SDK propietario de Langfuse en el código               | Las trazas usan semántica `gen_ai.*`; cambiar a Grafana/Honeycomb es configuración. El SDK de Anthropic aporta sus spans nativos.                                                                                                                                                              |
-| 8   | **Biome**                                                                                              | ESLint + Prettier                                      | Una sola herramienta, rápida y liviana (disco limitado en la máquina de desarrollo).                                                                                                                                                                                                           |
-| 9   | **Front en React + Vite + TypeScript**, monorepo `backend/` + `frontend/`                              | HTML plano / front servido aparte                      | El chat tiene estado real (conversaciones, pasos en vivo, confirmaciones); componentes y un hook concentran esa lógica, y la lógica de dominio del front se prueba sin navegador. Un solo despliegue: el backend sirve `frontend/dist` en el mismo origen (sin CORS).                          |
-| 10  | **Lenguaje de negocio en la interfaz**; detalle técnico plegado                                        | Mostrar nombres de herramientas y JSON en primer plano | La usuaria es la analista administrativa. Cada paso se lee como "Leí la solicitud", "Armé el paquete…"; el nombre de la herramienta, lo que se le pidió y lo que respondió siguen visibles al desplegar (PRD §6.1). El prompt también pide hablar por nombre de cliente, sin rutas ni códigos. |
-| 11  | **Streaming SSE** del avance del turno                                                                 | Solo respuesta al final / WebSockets                   | La analista ve cada paso en vivo ("Estoy armando el paquete…"); SSE sobre POST es unidireccional y basta, sin estado de conexión adicional. `/api/chat` (JSON) se mantiene para integraciones y pruebas.                                                                                       |
+| #   | Decisión                                                                                               | Alternativa descartada                                    | Por qué                                                                                                                                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Mapeo determinista** (glosario → clave literal → similitud de Dice con umbrales 0,8 / 0,6) en código | Pedir al LLM que mapee etiquetas                          | Reproducible, auditable (ruta `maestro.json#clave`), probado y gratis; el LLM podría "completar" valores. La similitud cubre variantes; lo dudoso queda en `requiere_confirmacion`.                                                                                                            |
+| 2   | **Formulario desde `mapeo_id`** persistido                                                             | Pasar el mapeo (con valores) como argumento del modelo    | Garantiza CA2 por diseño: el modelo no puede alterar un NIT o una cuenta en tránsito. Coste: una lectura de archivo.                                                                                                                                                                           |
+| 3   | **Ciclo propio** con adaptador `enviar()`                                                              | Tool Runner del SDK / frameworks (LangChain, AutoGen)     | El PRD exige que cambiar de proveedor no toque el ciclo, y la puerta de confirmación debe vivir en el host. Un agente único basta: multiagente (Wu et al., 2023) añadiría costo y latencia sin beneficio aquí.                                                                                 |
+| 4   | **Confirmación como herramienta + estado en el host**                                                  | Detectar "¿confirmas?" en el texto del modelo             | Señal estructurada y verificable; el front sabe exactamente qué acción y caso aprobar.                                                                                                                                                                                                         |
+| 5   | **PDF generado** con pdf-lib                                                                           | Rellenar un AcroForm                                      | El PRD lo acepta; no hay PDF original en los fixtures. pdf-lib es JS puro (sin binarios nativos).                                                                                                                                                                                              |
+| 6   | **Sesiones en memoria** con TTL y LRU                                                                  | Base de datos / archivo                                   | No-objetivo del PRD; en Render free el disco es efímero. Se pierde el historial al reiniciar (aceptado).                                                                                                                                                                                       |
+| 7   | **OpenTelemetry neutral** + Langfuse como destino                                                      | SDK propietario de Langfuse en el código                  | Las trazas usan semántica `gen_ai.*`; cambiar a Grafana/Honeycomb es configuración. El SDK de Anthropic aporta sus spans nativos.                                                                                                                                                              |
+| 8   | **Biome**                                                                                              | ESLint + Prettier                                         | Una sola herramienta, rápida y liviana (disco limitado en la máquina de desarrollo).                                                                                                                                                                                                           |
+| 9   | **Front en React + Vite + TypeScript**, monorepo `backend/` + `frontend/`                              | HTML plano / front servido aparte                         | El chat tiene estado real (conversaciones, pasos en vivo, confirmaciones); componentes y un hook concentran esa lógica, y la lógica de dominio del front se prueba sin navegador. Un solo despliegue: el backend sirve `frontend/dist` en el mismo origen (sin CORS).                          |
+| 10  | **Lenguaje de negocio en la interfaz**; detalle técnico plegado                                        | Mostrar nombres de herramientas y JSON en primer plano    | La usuaria es la analista administrativa. Cada paso se lee como "Leí la solicitud", "Armé el paquete…"; el nombre de la herramienta, lo que se le pidió y lo que respondió siguen visibles al desplegar (PRD §6.1). El prompt también pide hablar por nombre de cliente, sin rutas ni códigos. |
+| 11  | **Streaming SSE** del avance del turno                                                                 | Solo respuesta al final / WebSockets                      | La analista ve cada paso en vivo ("Estoy armando el paquete…"); SSE sobre POST es unidireccional y basta, sin estado de conexión adicional. `/api/chat` (JSON) se mantiene para integraciones y pruebas.                                                                                       |
+| 12  | **Minimización de datos hacia el modelo**                                                              | Confiar solo en el enmascarado de la plataforma de trazas | El modelo no necesita la cuenta ni el SWIFT para razonar; si no los recibe, tampoco pueden filtrarse en trazas, logs del proveedor ni respuestas.                                                                                                                                              |
 
 **Dependencias** (todas justificadas): `@anthropic-ai/sdk` (modelo), `zod` (contrato de
 herramientas, configuración y API), `hono` + `@hono/node-server` (HTTP y SSE, testeable sin
@@ -193,45 +196,46 @@ Desarrollo: `typescript`, `@types/node`, `@biomejs/biome`. Pruebas con `node:tes
 
 ## 8. Cobertura
 
-| Historia                | Estado                                                       | Evidencia                                                                                                        | Falta para producción                                                  |
-| ----------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| HU-1 Leer la solicitud  | **Hecho**                                                    | `leer_solicitud`, ambiguas con equivalente por país                                                              | Leer el `.xlsx`/`.pdf` real del adjunto en vez de un JSON normalizado. |
-| HU-2 Mapear campos      | **Hecho**                                                    | 3 estados, ruta del dato, glosario, umbral 0,8, RN1                                                              | Revisión humana de sinónimos nuevos que alimente el glosario.          |
-| HU-3 Formulario         | **Hecho** P0 xlsx · P1 pdf · P2 portal (`valores-portal.md`) | Pruebas leen la celda exacta del Excel generado                                                                  | Rellenar la plantilla original del cliente y AcroForms.                |
-| HU-4 Paquete para firma | **Hecho**                                                    | checklist con presentes/ausentes/vencidos, borrador sin datos bancarios, confirmación antes de enviar            | Firma electrónica y envío real (fuera de alcance).                     |
-| HU-5 Errores            | **Hecho**                                                    | Caso inexistente, plantilla corrupta, args inválidos, timeout del modelo                                         | Alertas operativas sobre la tasa de errores.                           |
-| Bonus módulo (§9.4)     | **Hecho**                                                    | `modulo/` generado de las mismas fuentes; `modulo:check` en CI                                                   | Publicarlo como paquete versionado.                                    |
-| Front según diseño      | **Hecho**                                                    | React con el prototipo de `docs/diseno/`: pasos en vivo, progreso de 5 puntos, confirmación resaltada, descargas | Pruebas de componentes y de accesibilidad automatizadas.               |
-| Link público            | **Hecho**                                                    | Render, autodeploy desde `main`                                                                                  | Plan pagado (sin "cold start"), dominio propio.                        |
+| Historia                             | Estado                                                       | Evidencia                                                                                                            | Falta para producción                                                  |
+| ------------------------------------ | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| HU-1 Leer la solicitud               | **Hecho**                                                    | `leer_solicitud`, ambiguas con equivalente por país                                                                  | Leer el `.xlsx`/`.pdf` real del adjunto en vez de un JSON normalizado. |
+| HU-2 Mapear campos                   | **Hecho**                                                    | 3 estados, ruta del dato, glosario, umbral 0,8, RN1                                                                  | Revisión humana de sinónimos nuevos que alimente el glosario.          |
+| HU-3 Formulario                      | **Hecho** P0 xlsx · P1 pdf · P2 portal (`valores-portal.md`) | Pruebas leen la celda exacta del Excel generado                                                                      | Rellenar la plantilla original del cliente y AcroForms.                |
+| HU-4 Paquete para firma              | **Hecho**                                                    | checklist con presentes/ausentes/vencidos, borrador sin datos bancarios, confirmación antes de enviar                | Firma electrónica y envío real (fuera de alcance).                     |
+| HU-5 Errores                         | **Hecho**                                                    | Caso inexistente, plantilla corrupta, args inválidos, timeout del modelo                                             | Alertas operativas sobre la tasa de errores.                           |
+| Agente para otras plataformas (§9.4) | **Hecho**                                                    | Paquete descargable (release) con prompt, skill y herramientas, generado de las mismas fuentes; `modulo:check` en CI | Versionado semántico y publicación en un registro de paquetes.         |
+| Front según diseño                   | **Hecho**                                                    | React con el prototipo de `docs/diseno/`: pasos en vivo, progreso de 5 puntos, confirmación resaltada, descargas     | Pruebas de componentes y de accesibilidad automatizadas.               |
+| Link público                         | **Hecho**                                                    | Render, autodeploy desde `main`                                                                                      | Plan pagado (sin "cold start"), dominio propio.                        |
 
-**Calidad**: 59 pruebas (`node:test`: 52 del backend y 7 del dominio del front): herramientas, ciclo con LLM guionado, API, telemetría y
+**Calidad**: 64 pruebas (`node:test`: 56 del backend y 8 del dominio del front): herramientas, ciclo con LLM guionado, API, telemetría y
 módulo. Cobertura ≈ 97 % líneas / 86 % ramas, con umbrales que hacen fallar el CI.
 CI en cada rama: Biome, tipos estrictos, pruebas, `demo.ts` sin claves, `npm audit`, gitleaks;
 CodeQL; dependency review; Dependabot. GitHub _push protection_ bloqueó una vez un secreto: funcionó.
 
-**Observabilidad**: un span `invoke_agent` por turno con un `execute_tool` por herramienta y los spans
-`anthropic.messages.create` del SDK anidados; atributos `gen_ai.*` y `langfuse.*` (sesión, tipo de
-observación). Métricas: `gen_ai.client.token.usage`, `gen_ai.client.operation.duration`, caché,
-turnos por resultado, iteraciones, herramientas, confirmaciones (solicitada/aprobada/rechazada/bloqueada),
-errores, campos por estado, paquetes listos y sesiones activas. Antes de exportar, los valores
-sensibles reales del maestro (cuenta, SWIFT, cédula) se reemplazan por `***`.
+**Observabilidad**: trazas y métricas del agente en Langfuse; detalle en la sección 11.
 
 ## 9. Uso de IA
 
-| Asistente                         | Para qué                                                                                                                                                                                                                                                                |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Claude Code (Claude Opus 5.5)** | Lectura del PRD y fixtures, diseño de la arquitectura, implementación de herramientas, ciclo, adaptador, telemetría, API y front; pruebas; workflows de CI; despliegue en Render vía API; redacción de esta documentación. Trabajo en ramas con CI antes de cada merge. |
+Se usó **Claude Code (modelo Claude Opus 5.5)** como asistente de ingeniería en tres frentes. La
+dirección del trabajo, la validación de cada entrega y las decisiones finales fueron mías.
 
-Qué se descartó de lo propuesto y por qué:
+| Frente                              | En qué ayudó la IA                                                                                                                                                                                                                     | Qué decidí y validé                                                                                                                                    |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Levantamiento del requerimiento** | Desglosar el PRD en historias, reglas (RN1–RN5) y reglas del ciclo (CA1–CA5); cruzarlas con los fixtures para detectar casos borde (identificador extranjero, soportes vencidos con la fecha real, formato portal, campos sin fuente). | Alcance y prioridades (P0 Excel, P1 PDF, P2 portal como valores copiables), supuestos de la sección 7 y criterios de "hecho" para cada historia.       |
+| **Propuesta de arquitectura**       | Proponer y contrastar alternativas: ciclo propio vs. frameworks, mapeo determinista vs. por LLM, confirmación en el host vs. en el prompt, monorepo backend/frontend, OpenTelemetry neutral con Langfuse como destino.                 | Elegir la arquitectura final y sus trade-offs (sección 6), con base en la bibliografía de agentes (ReAct, RAG, NIST AI RMF).                           |
+| **Construcción del código**         | Implementación de herramientas, ciclo del agente, adaptador del modelo, telemetría, API, front en React según el prototipo de diseño entregado, pruebas, CI/CD y despliegue en Render.                                                 | Revisión de cada cambio en su rama, con CI en verde antes de integrar a `main`, y prueba de punta a punta con el modelo real antes de cada despliegue. |
 
-- **Tool Runner del SDK** para el ciclo: ataba el bucle a un proveedor y dejaba la confirmación en el modelo → ciclo propio con puerta en el host.
-- **Mapeo de campos por LLM**: no determinista y con riesgo de valores "plausibles" → mapeo en código + `requiere_confirmacion`.
-- **Pasar valores al generador** desde el modelo → `mapeo_id` (CA2 por diseño).
-- **Auto-instrumentación completa de OpenTelemetry**: mucho ruido y peso → spans semánticos propios + spans nativos del SDK.
-- **Publicar la clave de acceso en el README**: se entrega por separado.
-- **Detección de "sí" con un regex amplio**: aprobaba frases como "sí pero espera" → lista corta de afirmaciones sin negación + botones.
+**Decisiones tomadas sobre lo que propuso la IA** (qué se descartó y por qué):
 
-> Nota para la defensa: completar aquí cualquier otro asistente usado por la candidata.
+| Propuesta inicial                                           | Decisión                                                      | Motivo                                                                                                                 |
+| ----------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Usar el _Tool Runner_ del SDK para el ciclo                 | Ciclo propio con adaptador `enviar()`                         | El PRD exige cambiar de proveedor sin tocar el ciclo, y la confirmación humana debe vivir en el host, no en el modelo. |
+| Que el modelo mapee las etiquetas del cliente               | Mapeo determinista en código + estado `requiere_confirmacion` | Reproducible, auditable y sin riesgo de valores "plausibles" inventados.                                               |
+| Pasar el mapeo (con valores) al generador del formulario    | El generador recibe solo un `mapeo_id`                        | Ningún NIT ni cuenta pasa por el modelo: CA2 garantizado por diseño.                                                   |
+| Detectar el "sí" con una expresión amplia                   | Lista corta de afirmaciones sin negación + botones explícitos | La versión amplia aprobaba frases como "sí, pero espera".                                                              |
+| Auto-instrumentación completa de OpenTelemetry              | Spans semánticos propios + spans nativos del SDK              | Menos ruido y peso; trazas legibles en Langfuse.                                                                       |
+| Interfaz con nombres de herramientas y JSON en primer plano | Lenguaje de negocio; detalle técnico plegado                  | La usuaria es la analista administrativa; el PRD exige mostrar las llamadas, no que sean lo principal.                 |
+| Publicar la clave de acceso del link en el README           | Se entrega por separado                                       | Un repositorio público expondría la clave y el costo del modelo.                                                       |
 
 ## 10. Riesgos de llevarlo a producción y mitigaciones
 
@@ -248,6 +252,108 @@ Organizados con las funciones del **NIST AI RMF 1.0** (Gobernar, Mapear, Medir, 
 | Plantillas reales peores que los fixtures           | Validación zod con errores claros; el proceso continúa                                                                              | Lectura del adjunto real, golden set de plantillas por cliente y evaluación continua.               |
 | Pérdida de sesión al reiniciar                      | Aceptado (no-objetivo)                                                                                                              | Persistencia en Redis/Postgres si se usa a diario.                                                  |
 | Cambio o caída del proveedor del modelo             | Adaptador intercambiable, reintentos, fallback de servidor                                                                          | Segundo proveedor configurado como respaldo.                                                        |
+
+## 11. Observabilidad con Langfuse
+
+Cada conversación queda trazada en **Langfuse Cloud** mediante **OpenTelemetry**, sin acoplar el
+código a Langfuse: si mañana se usa Grafana, Datadog o Honeycomb, solo cambia la configuración.
+
+**Qué se ve en Langfuse por cada turno** (agrupado por sesión de chat):
+
+```
+invoke_agent registro-proveedor              AGENT       mensaje de la analista → respuesta
+├── anthropic.messages.create                GENERATION  modelo, tokens, caché, latencia
+├── execute_tool proveedor_leer_solicitud    TOOL        argumentos → resumen del resultado
+├── anthropic.messages.create                GENERATION
+├── execute_tool proveedor_mapear_campos     TOOL
+└── …
+```
+
+| Aspecto       | Implementación                                                                                                                                                                                                                                                                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trazas        | Span por turno (`invoke_agent`) y por herramienta (`execute_tool`) con atributos `gen_ai.*` (convenciones semánticas de OpenTelemetry) y `langfuse.*` (sesión, tipo de observación, entrada y salida). El SDK de Anthropic aporta sus spans `anthropic.messages.create` anidados bajo el turno.                                                       |
+| Métricas      | `gen_ai.client.token.usage`, `gen_ai.client.operation.duration`, tokens en caché, turnos por resultado, iteraciones, llamadas y duración por herramienta, confirmaciones (solicitada / aprobada / rechazada / bloqueada), errores por origen, campos por estado, paquetes listos para firma y sesiones activas. Se exportan a cualquier backend OTLP. |
+| Privacidad    | Antes de exportar, los valores sensibles reales del maestro (cuenta bancaria, SWIFT, cédula) se reemplazan por `***`. Por defecto solo se exportan metadatos; el modo `content` (activo en el despliegue) agrega mensajes y respuestas ya enmascarados.                                                                                               |
+| Configuración | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` (región US) y `TELEMETRY_CONTENT_MODE`; opcionalmente `OTEL_EXPORTER_OTLP_ENDPOINT` para métricas y trazas a otro backend. Sin claves, la telemetría queda apagada y la app funciona igual.                                                                                         |
+| Robustez      | Exportación por lotes y apagado ordenado: al recibir `SIGTERM` (reinicio de Render) se vacían los buffers para no perder las últimas trazas.                                                                                                                                                                                                          |
+
+**Traces de demostración** (flujo del PRD §11 ejecutado en producción, una sola sesión):
+
+| Turno                          | Qué muestra                                                              | Trace                                                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| 1. Procesar Corporación Andina | Las 4 herramientas encadenadas y 5 llamadas al modelo con tokens y caché | [ver trace](https://us.cloud.langfuse.com/project/cmwbfksbk04w7ad0efkeyfx6f/traces/768206b4bc320d349c148ead86a2294d) |
+| 2. "envía"                     | El agente solicita la confirmación humana y no envía                     | [ver trace](https://us.cloud.langfuse.com/project/cmwbfksbk04w7ad0efkeyfx6f/traces/914c97c7c608add77feed251bed0340e) |
+| 3. "Sí, confirmo el envío."    | El host aprueba y se registra el envío simulado                          | [ver trace](https://us.cloud.langfuse.com/project/cmwbfksbk04w7ad0efkeyfx6f/traces/3cfd07eadc1b3c3f641c07090512877a) |
+
+Los traces son públicos (solo lectura, datos ficticios y enmascarados): se abren sin cuenta de Langfuse.
+
+**Hallazgo gracias a las trazas.** Al revisar un trace exportado de Langfuse se detectó que la
+cuenta bancaria y el SWIFT viajaban al modelo dentro del resultado de `proveedor_mapear_campos` y
+quedaban en los spans del SDK, que el enmascarado de Langfuse no cubre. Se corrigió en dos capas:
+(1) **minimización**: las herramientas entregan al modelo los campos sensibles como `••••2345` (el
+valor completo solo llega al formulario, vía `mapeo_id`); (2) **defensa en profundidad**: un
+procesador OpenTelemetry enmascara todos los atributos de todos los spans antes de exportar. Se
+verificó en los traces de producción que ningún dato sensible aparece, y se agregaron pruebas de regresión.
+
+Uso práctico: auditar qué herramientas usó el agente para llegar a cada respuesta, detectar turnos
+lentos o costosos, medir el costo por caso con los tokens reales y revisar en qué paso falló una
+conversación.
+
+## 12. Integración con otras plataformas de agentes
+
+El agente se entrega también como un **paquete descargable e independiente del servidor** de esta
+aplicación, para integrarlo en otras plataformas de agentes:
+
+- **Descarga**: [`agente-registro-proveedor.zip`](https://github.com/veronicabravob/registro_proveedor/releases/latest/download/agente-registro-proveedor.zip)
+  (última release del repositorio), o `npm run modulo:empaquetar` desde el código.
+- **Contenido**: `agent.md` (frontmatter `description`, `mode: primary`,
+  `permission { edit: deny, bash: deny }` + system prompt), `skill/registro-proveedor/SKILL.md`
+  (frontmatter `name`, `description` + conocimiento del proceso), `tools/proveedor.ts` (las mismas
+  herramientas zod), reglas de negocio, datos de ejemplo y un `ejemplo.ts` que corre el flujo sin
+  modelo ni servidor.
+- **Uso**: `npm install && npm run ejemplo`; la guía de integración paso a paso está en
+  [`modulo/README.md`](modulo/README.md).
+- **Mismas piezas que la app**: `agent.md` y `SKILL.md` se generan desde el prompt y el conocimiento
+  del backend, `modulo/tools/proveedor.ts` re-exporta las herramientas del backend y el `.zip` se arma
+  al publicar desde esos mismos archivos. El CI falla si alguna pieza diverge, y el workflow de
+  publicación prueba el paquete instalado de forma aislada antes de adjuntarlo a la release.
+
+## 13. Quality gates en GitHub
+
+El repositorio trabaja con **una rama por funcionalidad** (`feature/*`, `fix/*`, `ci/*`, `docs/*`,
+`refactor/*`), commits convencionales y merge `--no-ff` a `main` **solo con todos los controles en
+verde**. Cada push de cualquier rama ejecuta el pipeline; así un error se detecta antes de integrarse.
+
+**Pipeline `CI` (`.github/workflows/ci.yml`)**: siete controles independientes:
+
+| Control                         | Qué verifica                                                                                                                      | Falla si…                                                                         |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Lint y formato (Biome)          | Estilo uniforme, buenas prácticas, imports ordenados                                                                              | hay código sin formato o un error de lint                                         |
+| Tipos (tsc estricto, sin `any`) | Tipado estricto de backend y frontend; además, que el agente para otras plataformas esté sincronizado con la app                  | hay un error de tipos o `modulo/` quedó desactualizado                            |
+| Pruebas y cobertura             | 56 pruebas del backend (herramientas, ciclo con LLM simulado, API, streaming, telemetría, privacidad, paquete, PDF) y 8 del front | falla una prueba o la cobertura baja de 85 % líneas / 75 % ramas / 85 % funciones |
+| Build del front (React + Vite)  | Que la interfaz compile para producción                                                                                           | el build falla                                                                    |
+| `demo.ts` sin modelo            | El requisito del PRD §6.6: los 4 casos corren sin ninguna clave y generan sus archivos                                            | falta algún formulario o checklist                                                |
+| Auditoría de dependencias       | `npm audit` de dependencias de producción                                                                                         | hay vulnerabilidades de severidad alta                                            |
+| Escaneo de secretos (gitleaks)  | Todo el historial de git                                                                                                          | aparece una clave, token o credencial                                             |
+
+**Seguridad adicional**
+
+| Control                   | Qué hace                                                                                                                                                                                                                                              |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CodeQL                    | Análisis estático de seguridad y calidad (`security-and-quality`) en cada PR, en `main` y semanalmente.                                                                                                                                               |
+| Revisión de dependencias  | En cada PR bloquea dependencias nuevas con vulnerabilidades altas o licencias copyleft (GPL/AGPL).                                                                                                                                                    |
+| Dependabot                | Propone cada semana actualizaciones de npm y de las actions, agrupadas (OpenTelemetry, dependencias de desarrollo).                                                                                                                                   |
+| Push protection de GitHub | Rechaza un push que contenga secretos. Se activó una vez durante el desarrollo: un archivo con la clave del modelo quedó en un commit local, el push fue rechazado, se corrigió el commit y se reforzó `.gitignore`. La clave nunca salió del equipo. |
+
+**Protección de `main`**: el ruleset versionado en `.github/rulesets/main.json` exige PR, los siete
+controles en verde con la rama al día, conversaciones resueltas, alertas de CodeQL altas resueltas,
+y prohíbe force-push y borrado de la rama.
+
+**Publicación** (`.github/workflows/publicar-agente.yml`): al crear una etiqueta `v*` arma el paquete
+del agente para otras plataformas, lo instala y prueba de forma aislada, y lo adjunta a la release.
+
+**Despliegue continuo**: Render despliega `main` automáticamente (`render.yaml`) con verificación de
+salud en `/api/health`. Si un build falla, la versión anterior sigue en servicio.
 
 ## Referencias
 
