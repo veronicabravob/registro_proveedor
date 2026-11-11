@@ -91,11 +91,7 @@ export interface Caso {
 export function leerCaso(ctx: Pick<ToolContext, "directory">, caso: string): Caso {
   const dir = dirCaso(ctx, caso)
   const solicitud = leerJson(join(dir, "solicitud.json"), SolicitudSchema, "La solicitud del cliente")
-  const soportesExigidos = leerJson(
-    join(dir, "soportes-exigidos.json"),
-    SoportesExigidosSchema,
-    "La lista de soportes exigidos",
-  )
+  const soportesExigidos = leerJson(join(dir, "soportes-exigidos.json"), SoportesExigidosSchema, "La lista de soportes exigidos")
   return { caso, solicitud, soportesExigidos }
 }
 

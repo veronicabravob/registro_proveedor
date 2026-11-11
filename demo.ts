@@ -11,7 +11,11 @@ import * as proveedor from "./src/tools/proveedor.ts"
 import { leerResultado, type ToolContext } from "./src/tools/types.ts"
 
 const raiz = fileURLToPath(new URL(".", import.meta.url))
-const ctx: ToolContext = { directory: raiz, sessionId: "demo", ...(process.env.FECHA_EJECUCION ? { fechaEjecucion: process.env.FECHA_EJECUCION } : {}) }
+const ctx: ToolContext = {
+  directory: raiz,
+  sessionId: "demo",
+  ...(process.env.FECHA_EJECUCION ? { fechaEjecucion: process.env.FECHA_EJECUCION } : {}),
+}
 
 type Datos = Record<string, unknown>
 
@@ -25,7 +29,8 @@ async function paso(nombre: string, salida: Promise<string>): Promise<Datos | nu
   return null
 }
 
-const lista = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => (typeof x === "string" ? x : String((x as Datos).etiqueta ?? x))) : [])
+const lista = (v: unknown): string[] =>
+  Array.isArray(v) ? v.map((x) => (typeof x === "string" ? x : String((x as Datos).etiqueta ?? x))) : []
 
 async function procesar(caso: string): Promise<{ caso: string; formato: string; listo: string; faltantes: number }> {
   console.log(`\n▶ ${caso}`)
@@ -40,7 +45,10 @@ async function procesar(caso: string): Promise<{ caso: string; formato: string; 
   for (const b of lista(paquete?.bloqueos)) console.log(`      bloqueo: ${b}`)
 
   // RN4: sin aprobación humana registrada por el host, el envío se rechaza.
-  await paso("simular_envio (sin OK)", proveedor.simular_envio.execute({ caso, confirmado: true }, { ...ctx, confirmaciones: new Set() }))
+  await paso(
+    "simular_envio (sin OK)",
+    proveedor.simular_envio.execute({ caso, confirmado: true }, { ...ctx, confirmaciones: new Set() }),
+  )
 
   return {
     caso,
@@ -64,7 +72,13 @@ async function main(): Promise<void> {
   const primero = resumen[0]?.caso
   if (primero) {
     console.log("\n▶ Envío con aprobación humana registrada por el host")
-    await paso("simular_envio (con OK)", proveedor.simular_envio.execute({ caso: primero, confirmado: true }, { ...ctx, confirmaciones: new Set([`simular_envio:${primero}`]) }))
+    await paso(
+      "simular_envio (con OK)",
+      proveedor.simular_envio.execute(
+        { caso: primero, confirmado: true },
+        { ...ctx, confirmaciones: new Set([`simular_envio:${primero}`]) },
+      ),
+    )
   }
 
   console.log("\nResumen")

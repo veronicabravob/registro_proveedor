@@ -1,13 +1,13 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { z } from "zod"
-import { leerCaso, leerGlosario, leerIndiceSoportes, leerMaestro, leerPlantilla, leerJson, type Formato } from "./lib/datos.ts"
+import { type Formato, leerCaso, leerGlosario, leerIndiceSoportes, leerJson, leerMaestro, leerPlantilla } from "./lib/datos.ts"
 import { definirHerramienta, type Ejecucion } from "./lib/definir.ts"
 import { generarPdf, generarValoresPortal, generarXlsx } from "./lib/formularios.ts"
-import { equivalenteTributario, formatearValor, MapeoArchivoSchema, mapearCampos, type Mapeo } from "./lib/mapeo.ts"
+import { equivalenteTributario, formatearValor, type Mapeo, MapeoArchivoSchema, mapearCampos } from "./lib/mapeo.ts"
 import { bloqueosDeFirma, borradorCorreoMd, checklistMd, evaluarSoportes } from "./lib/paquete.ts"
 import { nombreSoporte, reglas } from "./lib/reglas.ts"
-import { casoArg, dirSalida, rutas, rutaRelativa } from "./lib/rutas.ts"
+import { casoArg, dirSalida, rutaRelativa, rutas } from "./lib/rutas.ts"
 import { hoyISO, normalizar } from "./lib/texto.ts"
 import { ErrorDeHerramienta, type ToolContext } from "./types.ts"
 
@@ -140,10 +140,13 @@ export const generar_formulario = definirHerramienta("proveedor_generar_formular
     const { solicitud } = leerCaso(ctx, caso)
     const dir = prepararSalida(ctx, caso)
     const archivoMapeo = join(dir, "mapeo.json")
-    if (!existsSync(archivoMapeo)) throw new ErrorDeHerramienta("No hay mapeo para este caso: llama primero a proveedor_mapear_campos")
+    if (!existsSync(archivoMapeo))
+      throw new ErrorDeHerramienta("No hay mapeo para este caso: llama primero a proveedor_mapear_campos")
     const { campos, mapeo } = leerJson(archivoMapeo, MapeoArchivoSchema, "El mapeo guardado")
     if (mapeo.mapeo_id !== mapeoId) {
-      throw new ErrorDeHerramienta(`El mapeo "${mapeoId}" no coincide con el último mapeo del caso (${mapeo.mapeo_id}); vuelve a mapear`)
+      throw new ErrorDeHerramienta(
+        `El mapeo "${mapeoId}" no coincide con el último mapeo del caso (${mapeo.mapeo_id}); vuelve a mapear`,
+      )
     }
 
     const destino = join(dir, ARCHIVO_FORMULARIO[solicitud.formato])
@@ -153,12 +156,18 @@ export const generar_formulario = definirHerramienta("proveedor_generar_formular
       const plantilla = leerPlantilla(ctx, caso, "xlsx")
       if (plantilla.tipo !== "celdas") throw new ErrorDeHerramienta("La plantilla Excel no tiene celdas")
       const n = await generarXlsx(plantilla.celdas, mapeo, destino)
-      return { data: { ruta, formato: "xlsx", soportado: true, campos_escritos: n }, resumen: `Excel generado: ${ruta} (${n} celdas)` }
+      return {
+        data: { ruta, formato: "xlsx", soportado: true, campos_escritos: n },
+        resumen: `Excel generado: ${ruta} (${n} celdas)`,
+      }
     }
     if (solicitud.formato === "pdf") {
       const plantilla = leerPlantilla(ctx, caso, "pdf")
       const n = await generarPdf(plantilla.campos, mapeo, enc, destino)
-      return { data: { ruta, formato: "pdf", soportado: true, campos_escritos: n }, resumen: `PDF generado: ${ruta} (${n} campos)` }
+      return {
+        data: { ruta, formato: "pdf", soportado: true, campos_escritos: n },
+        resumen: `PDF generado: ${ruta} (${n} campos)`,
+      }
     }
     const n = await generarValoresPortal(campos, mapeo, enc, destino)
     return {
@@ -243,7 +252,12 @@ export const armar_paquete = definirHerramienta("proveedor_armar_paquete", {
           campos_por_confirmar: mapeo?.requiere_confirmacion.map((c) => ({ etiqueta: c.etiqueta, motivo: c.motivo })) ?? [],
         },
         fecha_evaluacion: fecha,
-        archivos: ["checklist.md", "borrador-correo.md", ...(formulario ? [nombreFormulario] : []), ...soportes.flatMap((s) => (s.archivo && s.estado !== "ausente" ? [s.archivo] : []))],
+        archivos: [
+          "checklist.md",
+          "borrador-correo.md",
+          ...(formulario ? [nombreFormulario] : []),
+          ...soportes.flatMap((s) => (s.archivo && s.estado !== "ausente" ? [s.archivo] : [])),
+        ],
       },
       resumen: `${listo_para_firma ? "LISTO" : "NO listo"} para firma · soportes: ${conteo("presente")} presentes, ${conteo("vencido")} vencidos, ${conteo("ausente")} ausentes`,
     }
@@ -283,7 +297,8 @@ export const simular_envio = definirHerramienta("proveedor_simular_envio", {
     const { solicitud } = leerCaso(ctx, caso)
     const dir = dirSalida(ctx, caso)
     const checklist = join(dir, "paquete", "checklist.md")
-    if (!existsSync(checklist)) throw new ErrorDeHerramienta("No hay paquete armado para este caso: llama primero a proveedor_armar_paquete")
+    if (!existsSync(checklist))
+      throw new ErrorDeHerramienta("No hay paquete armado para este caso: llama primero a proveedor_armar_paquete")
     const listo = readFileSync(checklist, "utf8").includes("Estado: LISTO PARA FIRMA")
 
     const destino = join(dir, "ENVIO-SIMULADO.md")
@@ -305,6 +320,9 @@ export const simular_envio = definirHerramienta("proveedor_simular_envio", {
       ].join("\n"),
       "utf8",
     )
-    return { data: { ruta: rutaRelativa(ctx, destino), listo_para_firma: listo }, resumen: `Envío simulado registrado en ${rutaRelativa(ctx, destino)}` }
+    return {
+      data: { ruta: rutaRelativa(ctx, destino), listo_para_firma: listo },
+      resumen: `Envío simulado registrado en ${rutaRelativa(ctx, destino)}`,
+    }
   },
 })

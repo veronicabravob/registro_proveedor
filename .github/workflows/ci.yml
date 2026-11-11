@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  lint:
+    name: Lint y formato (Biome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
+      - run: npm ci
+      - run: npx biome ci .
+
+  typecheck:
+    name: Tipos (tsc estricto, sin any)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    name: Pruebas y cobertura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
+      - run: npm ci
+      - name: Pruebas con umbral de cobertura (quality gate)
+        run: npm run test:coverage
+
+  demo:
+    name: demo.ts sin modelo (PRD §6.6)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
+      - run: npm ci
+      - name: Ejecutar demo sin claves de proveedor
+        run: npm run demo
+        env:
+          ANTHROPIC_API_KEY: ""
+      - name: Verificar artefactos generados
+        run: |
+          test -f out/co-industrias-delta/formulario.xlsx
+          test -f out/ec-corp-andina/formulario.pdf
+          test -f out/hn-agroexport-sula/formulario.xlsx
+          test -f out/pa-logistica-istmo/valores-portal.md
+          test -f out/ec-corp-andina/paquete/checklist.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-out
+          path: out/
+          retention-days: 7
+
+  audit:
+    name: Auditoría de dependencias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
+      - run: npm audit --omit=dev --audit-level=high
+
+  secrets:
+    name: Escaneo de secretos (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
