@@ -61,10 +61,12 @@ export function Compositor({
   enviar,
   trabajando,
   hayConversacion,
+  archivada = false,
 }: {
   enviar: (t: string) => void
   trabajando: boolean
   hayConversacion: boolean
+  archivada?: boolean
 }) {
   const [texto, setTexto] = useState("")
   const alEnviar = (e: FormEvent) => {
@@ -75,9 +77,11 @@ export function Compositor({
   }
   const ayuda = trabajando
     ? "Dame un momento, ya casi termino"
-    : hayConversacion
-      ? "Responde aquí o pide otra cosa"
-      : "O escríbelo: procesa el caso ec-corp-andina"
+    : archivada
+      ? "Escribe para empezar una conversación nueva"
+      : hayConversacion
+        ? "Responde aquí o pide otra cosa"
+        : "O escríbelo: procesa el caso ec-corp-andina"
   return (
     <form className="compositor" onSubmit={alEnviar}>
       <div className="caja">

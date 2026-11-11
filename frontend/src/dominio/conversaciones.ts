@@ -51,3 +51,34 @@ export function cuando(iso: string, ahora: Date = new Date()): string {
   if (dias === 1) return "Ayer"
   return fecha.toLocaleDateString("es-CO", { weekday: "long" }).replace(/^\w/, (l) => l.toUpperCase())
 }
+
+// ── Copia local del historial ────────────────────────────────────────────────
+// Las sesiones del servidor viven en memoria y se pierden al reiniciar (p. ej. en cada despliegue).
+// Guardar una copia permite seguir leyendo una conversación antigua aunque ya no se pueda continuar.
+
+const claveHistorial = (id: string): string => `rp.historial.${id}`
+
+export function guardarHistorial<T>(id: string, mensajes: readonly T[]): void {
+  try {
+    localStorage.setItem(claveHistorial(id), JSON.stringify(mensajes.slice(-60)))
+  } catch {
+    /* sin espacio o sin almacenamiento: la conversación sigue funcionando */
+  }
+}
+
+export function leerHistorial<T>(id: string): T[] | null {
+  try {
+    const crudo: unknown = JSON.parse(localStorage.getItem(claveHistorial(id)) ?? "null")
+    return Array.isArray(crudo) ? (crudo as T[]) : null
+  } catch {
+    return null
+  }
+}
+
+export function borrarHistorial(id: string): void {
+  try {
+    localStorage.removeItem(claveHistorial(id))
+  } catch {
+    /* nada que hacer */
+  }
+}
