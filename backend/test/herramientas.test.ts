@@ -212,3 +212,15 @@ describe("privacidad · minimización de datos", () => {
     assert.equal(libro.getWorksheet("Datos Bancarios")?.getCell("C5").value, "03100012345")
   })
 })
+
+describe("diseño del formulario PDF", () => {
+  it("tamaño carta, una página para el caso de Ecuador y metadatos del cliente", async () => {
+    const { PDFDocument } = await import("pdf-lib")
+    const d = await ejecutar(proveedor.mapear_campos.execute({ caso: "ec-corp-andina", campos: [] }, ctx))
+    await ejecutar(proveedor.generar_formulario.execute({ caso: "ec-corp-andina", mapeo: String(d.mapeo_id) }, ctx))
+    const pdf = await PDFDocument.load(readFileSync(join(ctx.directory, "out/ec-corp-andina/formulario.pdf")))
+    assert.equal(pdf.getPageCount(), 1)
+    assert.deepEqual(pdf.getPage(0).getSize(), { width: 612, height: 792 })
+    assert.match(pdf.getTitle() ?? "", /Corporación Andina/)
+  })
+})

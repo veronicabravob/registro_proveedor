@@ -11,6 +11,7 @@ import {
   MapeoArchivoSchema,
   mapearCampos,
   ocultarSensibles,
+  valorEnRuta,
 } from "./lib/mapeo.ts"
 import { bloqueosDeFirma, borradorCorreoMd, checklistMd, evaluarSoportes } from "./lib/paquete.ts"
 import { nombreSoporte, reglas } from "./lib/reglas.ts"
@@ -162,7 +163,10 @@ export const generar_formulario = definirHerramienta("proveedor_generar_formular
     }
 
     const destino = join(dir, ARCHIVO_FORMULARIO[solicitud.formato])
-    const enc = { caso, solicitud, fechaEjecucion: fechaDe(ctx) }
+    const maestro = leerMaestro(ctx)
+    const nombre = formatearValor(valorEnRuta(maestro, "representante_legal.nombre"))
+    const cargo = formatearValor(valorEnRuta(maestro, "representante_legal.cargo"))
+    const enc = { caso, solicitud, fechaEjecucion: fechaDe(ctx), ...(nombre && cargo ? { firmante: { nombre, cargo } } : {}) }
     const ruta = rutaRelativa(ctx, destino)
     if (solicitud.formato === "xlsx") {
       const plantilla = leerPlantilla(ctx, caso, "xlsx")
